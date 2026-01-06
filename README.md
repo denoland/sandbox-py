@@ -10,7 +10,7 @@ This Python SDK let's you create and manage sandboxes programmatically.
 ## Installation
 
 ```sh
-uv add deno-sandbox
+uv pip install deno-sandbox
 ```
 
 ## Quick Start
