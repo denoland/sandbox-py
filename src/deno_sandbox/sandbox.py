@@ -10,9 +10,9 @@ from typing_extensions import Literal
 from deno_sandbox.options import Options, get_internal_options
 from deno_sandbox.rpc import AsyncRpcClient
 from deno_sandbox.sandbox_generated import (
-    Sandbox as GeneratedSandbox,
+    AsyncSandboxHandle as GeneratedAsyncSandboxHandle,
     SpawnArgs,
-    SandboxProcess as GeneratedSandboxProcess,
+    AsyncSandboxProcess as GeneratedAsyncSandboxProcess,
 )
 from deno_sandbox.transport import (
     Transport,
@@ -80,13 +80,13 @@ class AppConfig:
     memory_mb: int | None
 
 
-class AsyncSandboxProcess(GeneratedSandboxProcess):
+class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
     async def spawn(self, args: SpawnArgs) -> RemoteProcess:
         result: SpawnResult = await super().spawn(args)
         return RemoteProcess(result, self._rpc)
 
 
-class AsyncSandboxHandle(GeneratedSandbox):
+class AsyncSandboxHandle(GeneratedAsyncSandboxHandle):
     def __init__(self, rpc: AsyncRpcClient, sandbox_id: str):
         super().__init__(rpc, sandbox_id)
         self.process = AsyncSandboxProcess(rpc)
