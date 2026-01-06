@@ -2,7 +2,7 @@ import httpx
 from pydantic import BaseModel
 from pydantic_core import Url
 
-from deno_sandbox.console import ConsoleClient
+from deno_sandbox.console import AsyncConsoleClient
 from deno_sandbox.options import Options, get_internal_options
 
 
@@ -29,7 +29,7 @@ class Volume(BaseModel):
 class AsyncVolumes:
     def __init__(self, options: Options | None = None):
         internal_options = get_internal_options(options or Options())
-        self.__client = ConsoleClient(internal_options)
+        self.__client = AsyncConsoleClient(internal_options)
 
     async def create(self, options: VolumeCreateOptions):
         json = await self.__client.post("/api/v2/volumes", options)
