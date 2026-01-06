@@ -366,7 +366,7 @@ class ProcessKillArgs(BaseModel):
     vscode: bool | None = None
 
 
-class SpawnDenoResult(BaseModel):
+class RunResult(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
     pid: int
     stdout_stream_id: int | None = None
@@ -384,8 +384,8 @@ class SpawnDenoReplArgs(BaseModel):
     clear_env: bool | None = None
     cwd: str | None = None
     stdin_stream_id: int | None = None
-    stdout: Literal["piped", "null"]
-    stderr: Literal["piped", "null"]
+    stdout: Literal["piped", "null"] = "piped"
+    stderr: Literal["piped", "null"] = "piped"
     script_args: list[str] | None = None
 
 
@@ -433,7 +433,7 @@ class FetchResult(BaseModel):
     body_stream_id: int | None = None
 
 
-class ConnectArgs(BaseModel):
+class VSCodeConnectArgs(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
     path: str
     extensions: list[str]
@@ -443,7 +443,7 @@ class ConnectArgs(BaseModel):
     editor_settings: dict[str, Any] | None = None
 
 
-class ConnectResult(BaseModel):
+class VSCodeConnectResult(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
     pid: int
     port: int
@@ -521,8 +521,8 @@ class SpawnDenoByEntrypoint(BaseModel):
     clear_env: bool | None = None
     cwd: str | None = None
     stdin_stream_id: int | None = None
-    stdout: Literal["piped", "null"]
-    stderr: Literal["piped", "null"]
+    stdout: Literal["piped", "null"] = "piped"
+    stderr: Literal["piped", "null"] = "piped"
     script_args: list[str] | None = None
     entrypoint: str
 
@@ -533,8 +533,8 @@ class SpawnDenoByCode(BaseModel):
     clear_env: bool | None = None
     cwd: str | None = None
     stdin_stream_id: int | None = None
-    stdout: Literal["piped", "null"]
-    stderr: Literal["piped", "null"]
+    stdout: Literal["piped", "null"] = "piped"
+    stderr: Literal["piped", "null"] = "piped"
     script_args: list[str] | None = None
     code: str
     extension: Literal["js", "cjs", "mjs", "ts", "cts", "mts", "jsx", "tsx"]
@@ -552,143 +552,189 @@ class ExposeHttpByPid(BaseModel):
     pid: int
 
 
-class Sandbox:
+class AsyncSandboxHandle:
     def __init__(self, rpc: AsyncRpcClient, id: str):
         self.id = id
         self._rpc = rpc
-        self.fs = SandboxFs(rpc)
-        self.process = SandboxProcess(rpc)
-        self.deno = SandboxDeno(rpc)
-        self.net = SandboxNet(rpc)
-        self.vscode = SandboxVscode(rpc)
-        self.env = SandboxEnv(rpc)
+        self.fs = AsyncSandboxFs(rpc)
+        self.process = AsyncSandboxProcess(rpc)
+        self.deno = AsyncSandboxDeno(rpc)
+        self.net = AsyncSandboxNet(rpc)
+        self.vscode = AsyncSandboxVscode(rpc)
+        self.env = AsyncSandboxEnv(rpc)
 
     @validate_call(validate_return=True)
-    async def abort(self, args: AbortArgs):
+    async def abort(self, args: AbortArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("abort", value)
+        await self._rpc.call("abort", value)
 
 
-class SandboxFs:
+class AsyncSandboxFs:
     def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
     @validate_call(validate_return=True)
-    async def read_file(self, args: ReadFileArgs):
+    async def read_file(self, args: ReadFileArgs) -> None:
+        """Reads the entire contents of a file as bytes."""
+
         value = args.model_dump()
-        return await self._rpc.call("readFile", value)
+        await self._rpc.call("readFile", value)
 
     @validate_call(validate_return=True)
     async def read_text_file(self, args: ReadTextFileArgs) -> str:
+        """Reads the entire contents of a file as an UTF-8 decoded string."""
+
         value = args.model_dump()
         return await self._rpc.call("readTextFile", value)
 
     @validate_call(validate_return=True)
-    async def write_file(self, args: WriteFileWithContent | WriteFileWithStream):
+    async def write_file(
+        self, args: WriteFileWithContent | WriteFileWithStream
+    ) -> None:
+        """Write bytes to file. Creates a new file if needed. Existing files will be overwritten."""
+
         value = args.model_dump()
-        return await self._rpc.call("writeFile", value)
+        await self._rpc.call("writeFile", value)
 
     @validate_call(validate_return=True)
     async def write_text_file(
         self, args: WriteTextFileWithContent | WriteTextFileWithStream
-    ):
+    ) -> None:
+        """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
+
         value = args.model_dump()
-        return await self._rpc.call("writeTextFile", value)
+        await self._rpc.call("writeTextFile", value)
 
     @validate_call(validate_return=True)
     async def read_dir(self, args: ReadDirArgs) -> list[ReadDirEntry]:
+        """Read the directory entries at the given path."""
+
         value = args.model_dump()
         return await self._rpc.call("readDir", value)
 
     @validate_call(validate_return=True)
-    async def remove(self, args: RemoveArgs):
+    async def remove(self, args: RemoveArgs) -> None:
+        """Remove the file or directory at the given path."""
+
         value = args.model_dump()
-        return await self._rpc.call("remove", value)
+        await self._rpc.call("remove", value)
 
     @validate_call(validate_return=True)
-    async def mkdir(self, args: MkdirArgs):
+    async def mkdir(self, args: MkdirArgs) -> None:
+        """Create a new directory at the specified path."""
+
         value = args.model_dump()
-        return await self._rpc.call("mkdir", value)
+        await self._rpc.call("mkdir", value)
 
     @validate_call(validate_return=True)
-    async def rename(self, args: RenameArgs):
+    async def rename(self, args: RenameArgs) -> None:
+        """Rename (move) a file or directory."""
+
         value = args.model_dump()
-        return await self._rpc.call("rename", value)
+        await self._rpc.call("rename", value)
 
     @validate_call(validate_return=True)
-    async def copy_file(self, args: CopyFileArgs):
+    async def copy_file(self, args: CopyFileArgs) -> None:
+        """Copy a file from one location to another."""
+
         value = args.model_dump()
-        return await self._rpc.call("copyFile", value)
+        await self._rpc.call("copyFile", value)
 
     @validate_call(validate_return=True)
-    async def link(self, args: LinkArgs):
+    async def link(self, args: LinkArgs) -> None:
+        """Create a hard link pointing to an existing file."""
+
         value = args.model_dump()
-        return await self._rpc.call("link", value)
+        await self._rpc.call("link", value)
 
     @validate_call(validate_return=True)
     async def lstat(self, args: LstatArgs) -> LstatResult:
+        """Return file information about a file or directory symlink."""
+
         value = args.model_dump()
         return await self._rpc.call("lstat", value)
 
     @validate_call(validate_return=True)
     async def make_temp_dir(self, args: MakeTempDirArgs) -> str:
+        """Create a new temporary directory."""
+
         value = args.model_dump()
         return await self._rpc.call("makeTempDir", value)
 
     @validate_call(validate_return=True)
     async def make_temp_file(self, args: MakeTempFileArgs) -> str:
+        """Create a new temporary file."""
+
         value = args.model_dump()
         return await self._rpc.call("makeTempFile", value)
 
     @validate_call(validate_return=True)
     async def read_link(self, args: ReadLinkArgs) -> str:
+        """Read the target of a symbolic link."""
+
         value = args.model_dump()
         return await self._rpc.call("readLink", value)
 
     @validate_call(validate_return=True)
     async def real_path(self, args: RealPathArgs) -> str:
+        """Return the canonicalized absolute pathname."""
+
         value = args.model_dump()
         return await self._rpc.call("realPath", value)
 
     @validate_call(validate_return=True)
-    async def symlink(self, args: SymlinkArgs):
+    async def symlink(self, args: SymlinkArgs) -> None:
+        """Create a symbolic link."""
+
         value = args.model_dump()
-        return await self._rpc.call("symlink", value)
+        await self._rpc.call("symlink", value)
 
     @validate_call(validate_return=True)
-    async def truncate(self, args: TruncateArgs):
+    async def truncate(self, args: TruncateArgs) -> None:
+        """Truncate or extend the specified file to reach a given size."""
+
         value = args.model_dump()
-        return await self._rpc.call("truncate", value)
+        await self._rpc.call("truncate", value)
 
     @validate_call(validate_return=True)
     async def umask(self, args: UmaskArgs) -> int:
+        """Sets the process's file mode creation mask."""
+
         value = args.model_dump()
         return await self._rpc.call("umask", value)
 
     @validate_call(validate_return=True)
-    async def utime(self, args: UtimeArgs):
+    async def utime(self, args: UtimeArgs) -> None:
+        """Change the access and modification times of a file."""
+
         value = args.model_dump()
-        return await self._rpc.call("utime", value)
+        await self._rpc.call("utime", value)
 
     @validate_call(validate_return=True)
     async def open(self, args: OpenArgs) -> OpenResult:
+        """Open a file and return a file handle id."""
+
         value = args.model_dump()
         return await self._rpc.call("open", value)
 
     @validate_call(validate_return=True)
     async def create(self, args: CreateArgs) -> CreateResult:
+        """Create a new file and return a file handle id."""
+
         value = args.model_dump()
         return await self._rpc.call("create", value)
 
     @validate_call(validate_return=True)
-    async def file_close(self, args: FileCloseArgs):
+    async def file_close(self, args: FileCloseArgs) -> None:
+        """Close the specified file handle."""
+
         value = args.model_dump()
-        return await self._rpc.call("fileClose", value)
+        await self._rpc.call("fileClose", value)
 
     @validate_call(validate_return=True)
-    async def file_lock(self, args: FileLockArgs):
+    async def file_lock(self, args: FileLockArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("fileLock", value)
+        await self._rpc.call("fileLock", value)
 
     @validate_call(validate_return=True)
     async def file_read(self, args: FileReadArgs) -> FileReadResult:
@@ -706,29 +752,29 @@ class SandboxFs:
         return await self._rpc.call("fileStat", value)
 
     @validate_call(validate_return=True)
-    async def file_sync(self, args: FileSyncArgs):
+    async def file_sync(self, args: FileSyncArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("fileSync", value)
+        await self._rpc.call("fileSync", value)
 
     @validate_call(validate_return=True)
-    async def file_sync_data(self, args: FileSyncDataArgs):
+    async def file_sync_data(self, args: FileSyncDataArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("fileSyncData", value)
+        await self._rpc.call("fileSyncData", value)
 
     @validate_call(validate_return=True)
-    async def file_truncate(self, args: FileTruncateArgs):
+    async def file_truncate(self, args: FileTruncateArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("fileTruncate", value)
+        await self._rpc.call("fileTruncate", value)
 
     @validate_call(validate_return=True)
-    async def file_unlock(self, args: FileUnlockArgs):
+    async def file_unlock(self, args: FileUnlockArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("fileUnlock", value)
+        await self._rpc.call("fileUnlock", value)
 
     @validate_call(validate_return=True)
-    async def file_utime(self, args: FileUtimeArgs):
+    async def file_utime(self, args: FileUtimeArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("fileUtime", value)
+        await self._rpc.call("fileUtime", value)
 
     @validate_call(validate_return=True)
     async def file_write(self, args: FileWriteArgs) -> FileWriteResult:
@@ -746,15 +792,14 @@ class SandboxFs:
         return await self._rpc.call("expandGlob", value)
 
 
-class SandboxProcess:
+class AsyncSandboxProcess:
     def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
     @validate_call(validate_return=True)
     async def spawn(self, args: SpawnArgs) -> SpawnResult:
         value = args.model_dump()
-        result = await self._rpc.call("spawn", value)
-        return result
+        return await self._rpc.call("spawn", value)
 
     @validate_call(validate_return=True)
     async def wait(self, args: ProcessWaitArgs) -> ProcessWaitResult:
@@ -762,19 +807,17 @@ class SandboxProcess:
         return await self._rpc.call("processWait", value)
 
     @validate_call(validate_return=True)
-    async def kill(self, args: ProcessKillArgs):
+    async def kill(self, args: ProcessKillArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("processKill", value)
+        await self._rpc.call("processKill", value)
 
 
-class SandboxDeno:
+class AsyncSandboxDeno:
     def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
     @validate_call(validate_return=True)
-    async def run(
-        self, args: SpawnDenoByEntrypoint | SpawnDenoByCode
-    ) -> SpawnDenoResult:
+    async def run(self, args: SpawnDenoByEntrypoint | SpawnDenoByCode) -> RunResult:
         value = args.model_dump()
         return await self._rpc.call("spawnDeno", value)
 
@@ -789,9 +832,9 @@ class SandboxDeno:
         return await self._rpc.call("spawnDenoRepl", value)
 
     @validate_call(validate_return=True)
-    async def deno_repl_close(self, args: DenoReplCloseArgs):
+    async def deno_repl_close(self, args: DenoReplCloseArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("denoReplClose", value)
+        await self._rpc.call("denoReplClose", value)
 
     @validate_call(validate_return=True)
     async def deno_repl_eval(self, args: DenoReplEvalArgs) -> Any:
@@ -804,7 +847,7 @@ class SandboxDeno:
         return await self._rpc.call("denoReplCall", value)
 
 
-class SandboxNet:
+class AsyncSandboxNet:
     def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
@@ -814,22 +857,22 @@ class SandboxNet:
         return await self._rpc.call("fetch", value)
 
     @validate_call(validate_return=True)
-    async def expose_http(self, args: ExposeHttpByPort | ExposeHttpByPid):
+    async def expose_http(self, args: ExposeHttpByPort | ExposeHttpByPid) -> None:
         value = args.model_dump()
-        return await self._rpc.call("exposeHttp", value)
+        await self._rpc.call("exposeHttp", value)
 
 
-class SandboxVscode:
+class AsyncSandboxVscode:
     def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
     @validate_call(validate_return=True)
-    async def connect(self, args: ConnectArgs) -> ConnectResult:
+    async def connect(self, args: VSCodeConnectArgs) -> VSCodeConnectResult:
         value = args.model_dump()
         return await self._rpc.call("connect", value)
 
 
-class SandboxEnv:
+class AsyncSandboxEnv:
     def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
@@ -839,9 +882,9 @@ class SandboxEnv:
         return await self._rpc.call("envGet", value)
 
     @validate_call(validate_return=True)
-    async def set(self, args: EnvSetArgs):
+    async def set(self, args: EnvSetArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("envSet", value)
+        await self._rpc.call("envSet", value)
 
     @validate_call(validate_return=True)
     async def to_object(self, args: None) -> dict[str, str]:
@@ -849,6 +892,6 @@ class SandboxEnv:
         return await self._rpc.call("envToObject", value)
 
     @validate_call(validate_return=True)
-    async def delete(self, args: EnvDeleteArgs):
+    async def delete(self, args: EnvDeleteArgs) -> None:
         value = args.model_dump()
-        return await self._rpc.call("envDelete", value)
+        await self._rpc.call("envDelete", value)
