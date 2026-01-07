@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel
 from websockets import ConnectionClosed
 
+from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.transport import Transport
 
 
@@ -95,3 +96,15 @@ class AsyncRpcClient:
             for future in self._pending_requests.values():
                 if not future.done():
                     future.set_exception(e)
+
+
+class RpcClient:
+    def __init__(self, async_client: AsyncRpcClient, bridge: AsyncBridge):
+        self._async_client = async_client
+        self._bridge = bridge
+
+    def call(self, method: str, params: Dict[str, Any]) -> Any:
+        return self._bridge.run(self._async_client.call(method, params))
+
+    def close(self):
+        self._bridge.run(self._async_client.close())
