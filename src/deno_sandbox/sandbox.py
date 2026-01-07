@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import asdict, dataclass, field
 import json
 from typing import AsyncIterator
@@ -7,12 +7,14 @@ import uuid
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
+from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.options import Options, get_internal_options
-from deno_sandbox.rpc import AsyncRpcClient
+from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.sandbox_generated import (
     AsyncSandboxHandle as GeneratedAsyncSandboxHandle,
     SpawnArgs,
     AsyncSandboxProcess as GeneratedAsyncSandboxProcess,
+    SandboxHandle,
 )
 from deno_sandbox.transport import (
     Transport,
@@ -80,6 +82,27 @@ class AppConfig:
     memory_mb: int | None
 
 
+class Sandbox:
+    def __init__(self, options=None):
+        self._bridge = AsyncBridge()
+        self._async_sandbox = AsyncSandbox(options)
+
+    @contextmanager
+    def create(self, options=None):
+        async_cm = self._async_sandbox.create(options)
+        async_handle = self._bridge.run(async_cm.__aenter__())
+
+        rpc = RpcClient(async_handle._rpc, self._bridge)
+
+        try:
+            yield SandboxHandle(rpc, async_handle.id)
+        finally:
+            self._bridge.run(async_cm.__aexit__(None, None, None))
+
+    def close(self):
+        self._bridge.stop()
+
+
 class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
     async def spawn(self, args: SpawnArgs) -> RemoteProcess:
         result: SpawnResult = await super().spawn(args)
@@ -99,6 +122,7 @@ class AsyncSandbox:
     ):
         self.__options = get_internal_options(options or Options())
         self._transport_factory = WebSocketTransportFactory()
+        self._rpc: AsyncRpcClient | None = None
 
     async def _init_transport(self, app_config: AppConfig) -> Transport:
         transport = self._transport_factory.create_transport()
@@ -128,8 +152,8 @@ class AsyncSandbox:
         transport = await self._init_transport(app_config)
 
         try:
-            rpc = AsyncRpcClient(transport)
-            yield AsyncSandboxHandle(rpc, sandbox_id)
+            self._rpc = AsyncRpcClient(transport)
+            yield AsyncSandboxHandle(self._rpc, sandbox_id)
         finally:
             await transport.close()
 
