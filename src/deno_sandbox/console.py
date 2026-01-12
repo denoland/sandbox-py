@@ -9,12 +9,16 @@ class AsyncConsoleClient:
     def __init__(self, options: Options):
         self._options = get_internal_options(options or Options())
 
-        self.client = httpx.AsyncClient(
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self._options.token}",
-            }
-        )
+    @property
+    def client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self._options.token}",
+                }
+            )
+        return self._client
 
     async def post(self, path: str, data: any) -> dict:
         req_url = HttpUrl(self._options.console_url, path=path)
@@ -47,7 +51,6 @@ class ConsoleClient:
     def __init__(self, options: Options):
         self._options = get_internal_options(options or Options())
 
-        print(self._options)
         self.client = httpx.Client(
             headers={
                 "Content-Type": "application/json",

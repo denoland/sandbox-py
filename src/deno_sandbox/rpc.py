@@ -1,58 +1,69 @@
 import asyncio
 import base64
+from dataclasses import dataclass
 import json
-from typing import Any, Dict, Optional
-from pydantic import BaseModel
+from typing import Any, Dict
+from dataclasses_json import dataclass_json
 from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.transport import Transport
+from deno_sandbox.transport import WebSocketTransport
 
 
-class RpcRequest(BaseModel):
+@dataclass_json
+@dataclass
+class RpcRequest:
+    id: int
     method: str
-    params: Dict[str, Any]
-    id: int
+    params: dict[str, Any]
     jsonrpc: str = "2.0"
 
 
-class RpcResult[T](BaseModel):
-    ok: Optional[T] = None
-    error: Optional[Any] = None
+@dataclass_json
+@dataclass
+class RpcResult[T]:
+    ok: T | None = None
+    error: Any | None = None
 
 
-class RpcResponse[T](BaseModel):
-    jsonrpc: str = "2.0"
-    result: Optional[RpcResult[T]] = None
-    error: Dict[str, Any] | None = None
+@dataclass_json
+@dataclass
+class RpcResponse[T]:
     id: int
+    jsonrpc: str = "2.0"
+    result: RpcResult[T] | None = None
+    error: dict[str, Any] | None = None
 
 
 class AsyncRpcClient:
-    def __init__(self, transport: Transport):
+    def __init__(self, transport: WebSocketTransport):
         self._transport = transport
         self._id = 0
         self._pending_requests: Dict[int, asyncio.Future[Any]] = {}
-        self._listen_task = asyncio.create_task(self._listener())
+        self._listen_task: asyncio.Task[Any] | None = None
         self._pending_processes: Dict[int, asyncio.StreamReader] = {}
+        self._loop = None
 
     async def close(self):
         await self._transport.close()
 
     async def call(self, method: str, params: Dict[str, Any]) -> Any:
+        if self._listen_task is None or self._listen_task.done():
+            self._loop = asyncio.get_running_loop()
+            self._listen_task = self._loop.create_task(self._listener())
+
         req_id = self._id + 1
         self._id = req_id
 
         payload = RpcRequest(method=method, params=params, id=req_id)
 
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
+        future = self._loop.create_future()
         self._pending_requests[req_id] = future
 
-        await self._transport.send(payload.model_dump_json())
+        await self._transport.send(payload.to_json())
 
         raw_response = await future
-        response = RpcResponse[Any](**raw_response)
+        response = RpcResponse[Any].from_json(json.dumps(raw_response))
 
         if response.error:
             raise Exception(response.error)
@@ -91,6 +102,7 @@ class AsyncRpcClient:
                             del self._pending_processes[stream_id]
 
         except ConnectionClosed:
+            print("Transport connection closed.")  # --- IGNORE ---
             pass
         except Exception as e:
             for future in self._pending_requests.values():

@@ -1,31 +1,19 @@
-from abc import ABC, abstractmethod
-
+import asyncio
 from pydantic_core import Url
 from websockets import ConnectionClosed, connect
 
 
-class Transport(ABC):
-    @abstractmethod
-    async def send(self, data: dict[str, any]) -> None: ...
-
-    @abstractmethod
-    async def receive(self) -> dict[str, any]: ...
-
-    @abstractmethod
-    async def connect(self, url: Url, headers: dict[str, str]) -> None: ...
-
-    @abstractmethod
-    async def close(self) -> None: ...
-
-    @abstractmethod
-    async def __aiter__(self): ...
-
-
-class WebSocketTransport(Transport):
+class WebSocketTransport:
     async def connect(self, url: Url, headers: dict[str, str]) -> None:
         self._ws = await connect(str(url), additional_headers=headers)
 
     async def send(self, data: str) -> None:
+        if self._ws.loop != asyncio.get_running_loop():
+            print("DEBUG: Loop mismatch in WebSocketTransport.send")
+            # This is a debug check; if this triggers,
+            # pytest-asyncio has swapped the loop on you.
+            pass
+
         await self._ws.send(data)
 
     async def receive(self) -> dict[str, any]:
@@ -43,13 +31,3 @@ class WebSocketTransport(Transport):
                 yield message
         except ConnectionClosed:
             return
-
-
-class TransportFactory(ABC):
-    @abstractmethod
-    def create_transport(self) -> Transport: ...
-
-
-class WebSocketTransportFactory(TransportFactory):
-    def create_transport(self) -> Transport:
-        return WebSocketTransport()

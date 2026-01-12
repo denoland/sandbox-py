@@ -106,7 +106,7 @@ class TimelineListOptions:
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
 @dataclass
-class SandboxConnectOptions:
+class SandboxCreateOptions:
     region: str | None = None
     env: dict[str, str] | None = None
     timeout: str | None = None
@@ -117,6 +117,17 @@ class SandboxConnectOptions:
     allow_net: list[str] | None = None
     ssh: bool | None = None
     port: int | None = None
+    token: str | None = None
+    org: str | None = None
+
+
+@dataclass_json(letter_case=LetterCase.CAMEL)
+@dataclass
+class SandboxConnectOptions:
+    id: str
+    region: str | None = None
+    debug: bool | None = None
+    ssh: bool | None = None
     token: str | None = None
     org: str | None = None
 
@@ -186,38 +197,22 @@ class WriteFileOptions:
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
 @dataclass
-class WriteFileWithContent:
+class WriteFileArgs:
     path: str
-    content: str
     abort_id: int | None = None
     options: WriteFileOptions | None = None
+    content: str | None = None
+    content_stream_id: int | None = None
 
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
 @dataclass
-class WriteFileWithStream:
+class WriteTextFileArgs:
     path: str
-    content_stream_id: int
     abort_id: int | None = None
     options: WriteFileOptions | None = None
-
-
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WriteTextFileWithContent:
-    path: str
-    content: str
-    abort_id: int | None = None
-    options: WriteFileOptions | None = None
-
-
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WriteTextFileWithStream:
-    path: str
-    content_stream_id: int
-    abort_id: int | None = None
-    options: WriteFileOptions | None = None
+    content: str | None = None
+    content_stream_id: int | None = None
 
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
@@ -620,20 +615,7 @@ class KillArgs:
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
 @dataclass
-class SpawnDenoByEntrypoint:
-    entrypoint: str
-    stdout: Literal["piped", "null"] = "piped"
-    stderr: Literal["piped", "null"] = "piped"
-    env: dict[str, str] | None = None
-    clear_env: bool | None = None
-    cwd: str | None = None
-    stdin_stream_id: int | None = None
-    script_args: list[str] | None = None
-
-
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SpawnDenoByCode:
+class RunArgs:
     code: str
     extension: Literal["js", "cjs", "mjs", "ts", "cts", "mts", "jsx", "tsx"]
     stdout: Literal["piped", "null"] = "piped"
@@ -643,6 +625,7 @@ class SpawnDenoByCode:
     cwd: str | None = None
     stdin_stream_id: int | None = None
     script_args: list[str] | None = None
+    entrypoint: str | None = None
 
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
@@ -723,16 +706,10 @@ class NetFetchResult:
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
 @dataclass
-class ExposeHttpByPort:
+class ExposeHttpArgs:
     domain: str
-    port: int
-
-
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ExposeHttpByPid:
-    domain: str
-    pid: int
+    port: int | None = None
+    pid: int | None = None
 
 
 @dataclass_json(letter_case=LetterCase.CAMEL)
