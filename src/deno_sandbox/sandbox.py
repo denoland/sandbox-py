@@ -1,21 +1,31 @@
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 import json
 from typing import AsyncIterator
 import uuid
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
+from deno_sandbox.api_generated import (
+    AsyncSandboxDenoCli,
+    AsyncSandboxEnv,
+    AsyncSandboxFs,
+    AsyncSandboxNet,
+    AsyncSandboxVSCode,
+    AsyncSandboxProcess as GeneratedAsyncSandboxProcess,
+    SandboxDenoCli,
+    SandboxEnv,
+    SandboxFs,
+    SandboxNet,
+    SandboxProcess,
+    SandboxVSCode,
+)
+from deno_sandbox.api_types_generated import SandboxListOptions, SandboxMeta, SpawnArgs
 from deno_sandbox.bridge import AsyncBridge
+from deno_sandbox.console import ConsoleClient
 from deno_sandbox.options import Options, get_internal_options
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
-from deno_sandbox.sandbox_generated import (
-    AsyncSandboxHandle as GeneratedAsyncSandboxHandle,
-    SpawnArgs,
-    AsyncSandboxProcess as GeneratedAsyncSandboxProcess,
-    SandboxHandle,
-)
 from deno_sandbox.transport import (
     Transport,
     WebSocketTransportFactory,
@@ -26,7 +36,7 @@ type Mode = Literal["connect", "create"]
 type StdIo = Literal["piped", "null"]
 
 
-@dataclass(frozen=True)
+@dataclass
 class SandboxCreateOptions:
     env: dict[str, str] | None = None
     """Environment variables to set in the sandbox."""
@@ -45,32 +55,10 @@ class SandboxCreateOptions:
     """
 
 
-@dataclass(frozen=True)
+@dataclass
 class SandboxConnectOptions:
     id: uuid.UUID
     """Unique id of the sandbox."""
-
-
-@dataclass
-class SandboxRequestResult:
-    revision_id: str
-
-
-@dataclass
-class SandboxDeployOptions:
-    path: str | None = None
-    entrypoint: str = "main.ts"
-    args: list[str] = field(default_factory=list)
-
-
-@dataclass
-class SandboxInfo:
-    sandboxId: uuid.UUID
-    """The ID of the sandbox."""
-    createdAt: str
-    """The creation time of the sandbox."""
-    region: str
-    """The region where the sandbox is running."""
 
 
 @dataclass
@@ -83,9 +71,11 @@ class AppConfig:
 
 
 class Sandbox:
-    def __init__(self, options=None):
+    def __init__(self, options: Options | None = None):
+        self.__options = get_internal_options(options or Options())
+        self._client = ConsoleClient(options)
         self._bridge = AsyncBridge()
-        self._async_sandbox = AsyncSandbox(options)
+        self._async_sandbox = AsyncSandboxHandle(self.__options)
 
     @contextmanager
     def create(self, options=None):
@@ -99,6 +89,10 @@ class Sandbox:
         finally:
             self._bridge.run(async_cm.__aexit__(None, None, None))
 
+    def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
+        result = self._client.sandboxes_list(options.to_dict())
+        return [SandboxMeta.from_dict(i) for i in result]
+
     def close(self):
         self._bridge.stop()
 
@@ -109,18 +103,12 @@ class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
         return RemoteProcess(result, self._rpc)
 
 
-class AsyncSandboxHandle(GeneratedAsyncSandboxHandle):
-    def __init__(self, rpc: AsyncRpcClient, sandbox_id: str):
-        super().__init__(rpc, sandbox_id)
-        self.process = AsyncSandboxProcess(rpc)
-
-
-class AsyncSandbox:
+class AsyncSandboxWrapper:
     def __init__(
         self,
         options: Options | None = None,
     ):
-        self.__options = get_internal_options(options or Options())
+        self._options = get_internal_options(options or Options())
         self._transport_factory = WebSocketTransportFactory()
         self._rpc: AsyncRpcClient | None = None
 
@@ -128,11 +116,11 @@ class AsyncSandbox:
         transport = self._transport_factory.create_transport()
 
         headers = {
-            "Authorization": f"Bearer {self.__options.token}",
+            "Authorization": f"Bearer {self._options.token}",
             "x-denodeploy-config-v2": json.dumps(asdict(app_config)),
         }
 
-        await transport.connect(url=self.__options.sandbox_ws_url, headers=headers)
+        await transport.connect(url=self._options.sandbox_ws_url, headers=headers)
         return transport
 
     @asynccontextmanager
@@ -179,6 +167,9 @@ class AsyncSandbox:
         finally:
             await transport.close()
 
+    async def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
+        return await self._client.sandboxes_list(options)
+
 
 class SpawnResult(BaseModel):
     pid: int
@@ -211,3 +202,79 @@ class RemoteProcess:
         result = ProcessExit.model_validate(raw)
         self.returncode = result.code
         return self.returncode
+
+
+class AsyncSandboxHandle:
+    def __init__(self, rpc: AsyncRpcClient, sandbox_id: str):
+        self._rpc = rpc
+        self.id = sandbox_id
+        self.fs = AsyncSandboxFs(rpc)
+        self.net = AsyncSandboxNet(rpc)
+        self.deno = AsyncSandboxDenoCli(rpc)
+        self.vscode = AsyncSandboxVSCode(rpc)
+        self.env = AsyncSandboxEnv(rpc)
+        self.process = AsyncSandboxProcess(rpc)
+
+    async def abort(self) -> None:
+        await self._rpc.call("abort", {"abortId": self.id})
+
+
+class SandboxHandle:
+    def __init__(self, rpc: RpcClient, sandbox_id: str):
+        self._rpc = rpc
+        self.id = sandbox_id
+        self.fs = SandboxFs(rpc)
+        self.net = SandboxNet(rpc)
+        self.deno = SandboxDenoCli(rpc)
+        self.vscode = SandboxVSCode(rpc)
+        self.env = SandboxEnv(rpc)
+        self.process = SandboxProcess(rpc)
+
+    def abort(self) -> None:
+        self._rpc.call("abort", {"abortId": self.id})
+
+
+class SandboxWrapper:
+    def __init__(self, options: Options | None = None):
+        self._bridge = AsyncBridge()
+        self._async_sandbox = AsyncSandboxWrapper(options)
+
+    @contextmanager
+    def create(self, options: SandboxConnectOptions):
+        async_cm = self._async_sandbox.create(options)
+        async_handle = self._bridge.run(async_cm.__aenter__())
+
+        rpc = RpcClient(async_handle._rpc, self._bridge)
+
+        try:
+            yield SandboxHandle(rpc, async_handle.id)
+        except Exception:
+            import sys
+
+            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
+            raise
+        finally:
+            self._bridge.run(async_cm.__aexit__(None, None, None))
+
+    @contextmanager
+    def connect(self, options: SandboxConnectOptions):
+        async_cm = self._async_sandbox.connect(options)
+        async_handle = self._bridge.run(async_cm.__aenter__())
+
+        rpc = RpcClient(async_handle._rpc, self._bridge)
+
+        try:
+            yield SandboxHandle(rpc, async_handle.id)
+        except Exception:
+            import sys
+
+            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
+            raise
+        finally:
+            self._bridge.run(async_cm.__aexit__(None, None, None))
+
+    def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
+        return self._client.sandboxes_list(options)
+
+    def close(self):
+        self._bridge.stop()
