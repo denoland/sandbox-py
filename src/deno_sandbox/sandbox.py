@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import asdict, dataclass
 import json
-from typing import Any, AsyncIterator, Generator
+from typing import Any, AsyncIterator, Generator, Optional, cast
 import uuid
 from typing_extensions import Literal
 
@@ -29,7 +29,6 @@ from deno_sandbox.api_types_generated import (
     SandboxMeta,
     SpawnArgs,
 )
-from deno_sandbox.api_utils import convert_dict_to_typed
 from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.console import ConsoleClient
 from deno_sandbox.options import Options, get_internal_options
@@ -60,9 +59,7 @@ class Sandbox:
         self._async_sandbox = AsyncSandboxHandle(self.__options)
 
     @contextmanager
-    def create(self, options: SandboxCreateOptions | dict[str, Any] | None = None):
-        options = convert_dict_to_typed(options, SandboxCreateOptions)
-
+    def create(self, options: Optional[SandboxCreateOptions]):
         async_cm = self._async_sandbox.create(options)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
@@ -75,7 +72,7 @@ class Sandbox:
 
     def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
         result = self._client.sandboxes_list(options.to_dict())
-        return [SandboxMeta.from_dict(i) for i in result]
+        return [cast(SandboxMeta, i) for i in result]
 
     def close(self):
         self._bridge.stop()
@@ -84,38 +81,39 @@ class Sandbox:
 class AsyncSandboxWrapper:
     def __init__(
         self,
-        options: Options | None = None,
+        options: Optional[Options] = None,
     ):
-        self._options = get_internal_options(options or Options())
+        self._options = get_internal_options(options)
         self._rpc: AsyncRpcClient | None = None
 
     async def _init_transport(self, app_config: AppConfig) -> WebSocketTransport:
         transport = WebSocketTransport()
 
         headers = {
-            "Authorization": f"Bearer {self._options.token}",
+            "Authorization": f"Bearer {self._options['token']}",
             "x-denodeploy-config-v2": json.dumps(asdict(app_config)),
         }
 
-        await transport.connect(url=self._options.sandbox_ws_url, headers=headers)
+        await transport.connect(url=self._options["sandbox_ws_url"], headers=headers)
 
         return transport
 
     @asynccontextmanager
     async def create(
-        self, options: SandboxCreateOptions | dict[str, Any] | None = None
+        self, options: Optional[SandboxCreateOptions] = None
     ) -> AsyncIterator[AsyncSandboxHandle]:
         """Creates a new sandbox instance."""
 
-        options = convert_dict_to_typed(options, SandboxCreateOptions)
+        labels = options.get("labels", None) if options else None
+        memory_mb = options.get("memory_mb", None) if options else None
 
         sandbox_id = str(uuid.uuid4())
         app_config = AppConfig(
             sandbox_id=sandbox_id,
             mode="create",
             stop_at_ms=None,
-            labels=options.labels if options else None,
-            memory_mb=options.memory_mb if options else None,
+            labels=labels,
+            memory_mb=memory_mb,
         )
         transport = await self._init_transport(app_config)
 
@@ -127,13 +125,11 @@ class AsyncSandboxWrapper:
 
     @asynccontextmanager
     async def connect(
-        self, options: SandboxConnectOptions | dict[str, Any]
+        self, options: SandboxConnectOptions
     ) -> AsyncIterator[AsyncSandboxHandle]:
         """Connects to an existing sandbox instance."""
 
-        options = convert_dict_to_typed(options, SandboxConnectOptions)
-
-        sandbox_id = str(options.id)
+        sandbox_id = str(options["id"])
         app_config = AppConfig(
             sandbox_id=sandbox_id,
             mode="connect",
@@ -149,27 +145,42 @@ class AsyncSandboxWrapper:
         finally:
             await transport.close()
 
-    async def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
+    async def list(
+        self, options: Optional[SandboxListOptions] = None
+    ) -> list[SandboxMeta]:
         return await self._client.sandboxes_list(options)
 
 
 class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
     async def spawn(self, args: SpawnArgs) -> AsyncRemoteProcess:
+        if args.get("stdout") is None:
+            args["stdout"] = "piped"
+        if args.get("stderr") is None:
+            args["stderr"] = "piped"
+
+        # FIXME: Pipe inherit to stdout/stderr
+
         result: ProcessSpawnResult = await super().spawn(args)
         return AsyncRemoteProcess(result, self._rpc)
 
 
 class SandboxProcess(GeneratedSandboxProcess):
     def spawn(self, args: SpawnArgs) -> RemoteProcess:
+        if args.get("stdout") is None:
+            args["stdout"] = "piped"
+        if args.get("stderr") is None:
+            args["stderr"] = "piped"
+        # FIXME: Pipe inherit to stdout/stderr
+
         result: ProcessSpawnResult = super().spawn(args)
         return RemoteProcess(result, self._rpc)
 
 
 class AsyncRemoteProcess:
     def __init__(self, res: ProcessSpawnResult, rpc: AsyncRpcClient):
-        self.pid = res.pid
-        self._stdout_stream_id = res.stdout_stream_id
-        self._stderr_stream_id = res.stderr_stream_id
+        self.pid = res["pid"]
+        self._stdout_stream_id = res["stdout_stream_id"]
+        self._stderr_stream_id = res["stderr_stream_id"]
         self.returncode: int | None = None
 
         self.stdout = asyncio.StreamReader()
@@ -183,8 +194,8 @@ class AsyncRemoteProcess:
 
     async def wait(self) -> int:
         raw = await self._wait_task
-        result = ProcessWaitResult.from_dict(raw)
-        self.returncode = result.code
+        result = cast(ProcessWaitResult, raw)
+        self.returncode = result["code"]
         return self.returncode
 
 
@@ -207,7 +218,7 @@ class SyncStreamReader:
 
 class RemoteProcess:
     def __init__(self, res: ProcessSpawnResult, rpc: RpcClient):
-        self.pid = res.pid
+        self.pid = res["pid"]
         self._rpc = rpc
 
         self._async_proc = AsyncRemoteProcess(res, rpc._async_client)
@@ -253,13 +264,13 @@ class SandboxHandle:
 
 
 class SandboxWrapper:
-    def __init__(self, options: Options | None = None):
+    def __init__(self, options: Optional[Options] = None):
         self._bridge = AsyncBridge()
         self._async_sandbox = AsyncSandboxWrapper(options)
 
     @contextmanager
     def create(
-        self, options: SandboxCreateOptions | None = None
+        self, options: Optional[SandboxCreateOptions] = None
     ) -> Generator[SandboxHandle, Any, Any]:
         async_cm = self._async_sandbox.create(options)
         async_handle = self._bridge.run(async_cm.__aenter__())

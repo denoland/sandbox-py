@@ -1,3 +1,4 @@
+from typing import Optional
 from deno_sandbox.api_generated import (
     AppsApi,
     AsyncAppsApi,
@@ -19,7 +20,7 @@ __all__ = ["DenoDeploy", "AsyncDenoDeploy", "Options"]
 
 
 class DenoDeploy:
-    def __init__(self, options: Options | None = None):
+    def __init__(self, options: Optional[Options] = None):
         client = ConsoleClient(options)
         self.apps = AppsApi(client)
         self.revisions = RevisionsApi(client)
@@ -29,7 +30,7 @@ class DenoDeploy:
 
 
 class AsyncDenoDeploy:
-    def __init__(self, options: Options | None = None):
+    def __init__(self, options: Optional[Options] = None):
         client = AsyncConsoleClient(options)
         self.apps = AsyncAppsApi(client)
         self.revisions = AsyncRevisionsApi(client)

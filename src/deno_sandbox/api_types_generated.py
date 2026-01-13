@@ -1,69 +1,49 @@
 # ATTENTION: This file is auto-generated. Do not edit it manually.
 
 
-from dataclasses import dataclass
-from dataclasses_json import dataclass_json, LetterCase
-from typing import Literal, Any
+from typing_extensions import TypedDict, NotRequired, Literal, Any
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class App:
+class App(TypedDict):
     id: str
     slug: str
     created_at: str
     updated_at: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class AppListOptions:
-    cursor: str | None = None
-    limit: int | None = None
+class AppListOptions(TypedDict):
+    cursor: NotRequired[str | None]
+    limit: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class PaginatedList[T]:
+class PaginatedList[T](TypedDict):
     items: list[T]
     has_more: bool
-    next_cursor: str | None = None
+    next_cursor: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class AppInit:
+class AppInit(TypedDict):
     slug: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class AppUpdate:
-    slug: str | None = None
+class AppUpdate(TypedDict):
+    slug: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class TimelineApp:
+class TimelineApp(TypedDict):
     id: str
     slug: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class TimelineContext:
+class TimelineContext(TypedDict):
     slug: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class Domain:
+class Domain(TypedDict):
     domain: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class Timeline:
+class Timeline(TypedDict):
     slug: str
     partition: dict[str, str]
     app: TimelineApp
@@ -71,9 +51,7 @@ class Timeline:
     domains: list[Domain]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class Revision:
+class Revision(TypedDict):
     id: str
     status: Literal["building", "ready", "error"]
     timelines: list[Timeline]
@@ -81,84 +59,66 @@ class Revision:
     updated_at: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RevisionListOptions:
-    cursor: str | None = None
-    limit: int | None = None
+class RevisionListOptions(TypedDict):
+    cursor: NotRequired[str | None]
+    limit: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RevisionWithoutTimelines:
+class RevisionWithoutTimelines(TypedDict):
     id: str
     status: Literal["building", "ready", "error"]
     created_at: str
     updated_at: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class TimelineListOptions:
-    cursor: str | None = None
-    limit: int | None = None
+class TimelineListOptions(TypedDict):
+    cursor: NotRequired[str | None]
+    limit: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SandboxCreateOptions:
-    region: str | None = None
-    env: dict[str, str] | None = None
-    timeout: str | None = None
-    memory_db: str | None = None
-    debug: bool | None = None
-    labels: dict[str, str] | None = None
-    volumes: dict[str, str] | None = None
-    allow_net: list[str] | None = None
-    ssh: bool | None = None
-    port: int | None = None
-    token: str | None = None
-    org: str | None = None
+class SandboxCreateOptions(TypedDict):
+    region: NotRequired[str | None]
+    env: NotRequired[dict[str, str] | None]
+    timeout: NotRequired[str | None]
+    memory_db: NotRequired[str | None]
+    debug: NotRequired[bool | None]
+    labels: NotRequired[dict[str, str] | None]
+    volumes: NotRequired[dict[str, str] | None]
+    allow_net: NotRequired[list[str] | None]
+    ssh: NotRequired[bool | None]
+    port: NotRequired[int | None]
+    token: NotRequired[str | None]
+    org: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SandboxConnectOptions:
+class SandboxConnectOptions(TypedDict):
     id: str
-    region: str | None = None
-    debug: bool | None = None
-    ssh: bool | None = None
-    token: str | None = None
-    org: str | None = None
+    region: NotRequired[str | None]
+    debug: NotRequired[bool | None]
+    ssh: NotRequired[bool | None]
+    token: NotRequired[str | None]
+    org: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SandboxListOptions:
-    labels: dict[str, str] | None = None
+class SandboxListOptions(TypedDict):
+    labels: NotRequired[dict[str, str] | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SandboxMeta:
+class SandboxMeta(TypedDict):
     id: str
     created_at: str
     region: str
     status: Literal["running", "stopped"]
-    stopped_at: str | None = None
+    stopped_at: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class VolumesOptions:
+class VolumesOptions(TypedDict):
     slug: str
     region: str
     capacity: int | str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class Volume:
+class Volume(TypedDict):
     id: str
     slug: str
     region: str
@@ -166,127 +126,99 @@ class Volume:
     used: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class AbortArgs:
+class VolumeListOptions(TypedDict):
+    cursor: NotRequired[str | None]
+    limit: NotRequired[int | None]
+    search: NotRequired[str | None]
+
+
+class AbortArgs(TypedDict):
     abort_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ReadFileArgs:
+class ReadFileArgs(TypedDict):
     path: str
-    abort_id: int | None = None
+    abort_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ReadTextFileArgs:
+class ReadTextFileArgs(TypedDict):
     path: str
-    abort_id: int | None = None
+    abort_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WriteFileOptions:
-    create: bool | None = None
-    append: bool | None = None
-    create_new: bool | None = None
-    mode: int | None = None
+class WriteFileOptions(TypedDict):
+    create: NotRequired[bool | None]
+    append: NotRequired[bool | None]
+    create_new: NotRequired[bool | None]
+    mode: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WriteFileArgs:
+class WriteFileArgs(TypedDict):
     path: str
-    abort_id: int | None = None
-    options: WriteFileOptions | None = None
-    content: str | None = None
-    content_stream_id: int | None = None
+    abort_id: NotRequired[int | None]
+    options: NotRequired[WriteFileOptions | None]
+    content: NotRequired[str | None]
+    content_stream_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WriteTextFileArgs:
+class WriteTextFileArgs(TypedDict):
     path: str
-    abort_id: int | None = None
-    options: WriteFileOptions | None = None
-    content: str | None = None
-    content_stream_id: int | None = None
+    abort_id: NotRequired[int | None]
+    options: NotRequired[WriteFileOptions | None]
+    content: NotRequired[str | None]
+    content_stream_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ReadDirArgs:
+class ReadDirArgs(TypedDict):
     path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ReadDirEntry:
+class ReadDirEntry(TypedDict):
     name: str
     is_file: bool
     is_directory: bool
     is_symlink: bool
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RemoveOptions:
-    recursive: bool | None = None
+class RemoveOptions(TypedDict):
+    recursive: NotRequired[bool | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RemoveArgs:
+class RemoveArgs(TypedDict):
     path: str
-    options: RemoveOptions | None = None
+    options: NotRequired[RemoveOptions | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class MkdirOptions:
-    recursive: bool | None = None
-    mode: int | None = None
+class MkdirOptions(TypedDict):
+    recursive: NotRequired[bool | None]
+    mode: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class MkdirArgs:
+class MkdirArgs(TypedDict):
     path: str
-    options: MkdirOptions | None = None
+    options: NotRequired[MkdirOptions | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RenameArgs:
+class RenameArgs(TypedDict):
     old_path: str
     new_path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class CopyFileArgs:
+class CopyFileArgs(TypedDict):
     from_path: str
     to_path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class LinkArgs:
+class LinkArgs(TypedDict):
     target: str
     path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class LstatArgs:
+class LstatArgs(TypedDict):
     path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class FsLstatResult:
+class FsLstatResult(TypedDict):
     is_file: bool
     is_directory: bool
     is_symlink: bool
@@ -310,167 +242,119 @@ class FsLstatResult:
     is_socket: bool
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class MakeTempDirOptions:
-    dir: str | None = None
-    prefix: str | None = None
-    suffix: str | None = None
+class MakeTempDirOptions(TypedDict):
+    dir: NotRequired[str | None]
+    prefix: NotRequired[str | None]
+    suffix: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class MakeTempDirArgs:
-    options: MakeTempDirOptions | None = None
+class MakeTempDirArgs(TypedDict):
+    options: NotRequired[MakeTempDirOptions | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class MakeTempFileOptions:
-    dir: str | None = None
-    prefix: str | None = None
-    suffix: str | None = None
+class MakeTempFileOptions(TypedDict):
+    dir: NotRequired[str | None]
+    prefix: NotRequired[str | None]
+    suffix: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class MakeTempFileArgs:
-    options: MakeTempFileOptions | None = None
+class MakeTempFileArgs(TypedDict):
+    options: NotRequired[MakeTempFileOptions | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ReadLinkArgs:
+class ReadLinkArgs(TypedDict):
     path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RealPathArgs:
+class RealPathArgs(TypedDict):
     path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SymlinkOptions:
-    type: Literal["file", "dir", "junction"] | None = None
+class SymlinkOptions(TypedDict):
+    type: NotRequired[Literal["file", "dir", "junction"] | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SymlinkArgs:
+class SymlinkArgs(TypedDict):
     target: str
     path: str
-    options: SymlinkOptions | None = None
+    options: NotRequired[SymlinkOptions | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class TruncateArgs:
+class TruncateArgs(TypedDict):
     name: str
-    len: int | None = None
+    len: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class UmaskArgs:
-    mask: int | None = None
+class UmaskArgs(TypedDict):
+    mask: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class UtimeArgs:
+class UtimeArgs(TypedDict):
     path: str
     atime: str
     mtime: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileOpenOptions:
-    read: bool | None = None
-    write: bool | None = None
-    append: bool | None = None
-    truncate: bool | None = None
-    create: bool | None = None
-    create_new: bool | None = None
-    mode: int | None = None
+class FileOpenOptions(TypedDict):
+    read: NotRequired[bool | None]
+    write: NotRequired[bool | None]
+    append: NotRequired[bool | None]
+    truncate: NotRequired[bool | None]
+    create: NotRequired[bool | None]
+    create_new: NotRequired[bool | None]
+    mode: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class OpenArgs:
+class OpenArgs(TypedDict):
     path: str
-    options: FileOpenOptions | None = None
+    options: NotRequired[FileOpenOptions | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class FsOpenResult:
+class FsOpenResult(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class CreateArgs:
+class CreateArgs(TypedDict):
     path: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class FsCreateResult:
+class FsCreateResult(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileCloseArgs:
+class FileCloseArgs(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileLockArgs:
+class FileLockArgs(TypedDict):
     file_handle_id: int
-    exclusive: bool | None = None
+    exclusive: NotRequired[bool | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileReadArgs:
+class FileReadArgs(TypedDict):
     file_handle_id: int
     length: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class FsFileReadResult:
-    data: str | None = None
+class FsFileReadResult(TypedDict):
+    data: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileSeekArgs:
+class FileSeekArgs(TypedDict):
     file_handle_id: int
     offset: int | str
     whence: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class FsFileSeekResult:
+class FsFileSeekResult(TypedDict):
     position: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileStatArgs:
+class FileStatArgs(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileHandleStat:
+class FileHandleStat(TypedDict):
     is_file: bool
     is_directory: bool
     is_symlink: bool
@@ -494,258 +378,198 @@ class FileHandleStat:
     is_socket: bool
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileSyncArgs:
+class FileSyncArgs(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileSyncDataArgs:
+class FileSyncDataArgs(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileTruncateArgs:
+class FileTruncateArgs(TypedDict):
     file_handle_id: int
-    len: int | None = None
+    len: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileUnlockArgs:
+class FileUnlockArgs(TypedDict):
     file_handle_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileUtimeArgs:
+class FileUtimeArgs(TypedDict):
     file_handle_id: int
     atime: str
     mtime: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FileWriteArgs:
+class FileWriteArgs(TypedDict):
     file_handle_id: int
     data: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class FsFileWriteResult:
+class FsFileWriteResult(TypedDict):
     bytes_written: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WalkArgs:
+class WalkArgs(TypedDict):
     path: str
-    max_depth: int | None = None
-    include_files: bool | None = None
-    include_dirs: bool | None = None
-    include_symlinks: bool | None = None
-    follow_symlinks: bool | None = None
-    canonicalize: bool | None = None
-    exts: list[str] | None = None
-    match: list[str] | None = None
-    skip: list[str] | None = None
+    max_depth: NotRequired[int | None]
+    include_files: NotRequired[bool | None]
+    include_dirs: NotRequired[bool | None]
+    include_symlinks: NotRequired[bool | None]
+    follow_symlinks: NotRequired[bool | None]
+    canonicalize: NotRequired[bool | None]
+    exts: NotRequired[list[str] | None]
+    match: NotRequired[list[str] | None]
+    skip: NotRequired[list[str] | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ExpandGlobArgs:
+class ExpandGlobArgs(TypedDict):
     glob: str
-    extended: bool | None = None
-    globstar: bool | None = None
-    case_insensitive: bool | None = None
-    root: str | None = None
-    exclude: list[str] | None = None
-    include_dirs: bool | None = None
-    follow_symlinks: bool | None = None
-    canonicalize: bool | None = None
+    extended: NotRequired[bool | None]
+    globstar: NotRequired[bool | None]
+    case_insensitive: NotRequired[bool | None]
+    root: NotRequired[str | None]
+    exclude: NotRequired[list[str] | None]
+    include_dirs: NotRequired[bool | None]
+    follow_symlinks: NotRequired[bool | None]
+    canonicalize: NotRequired[bool | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SpawnArgs:
+class SpawnArgs(TypedDict):
     command: str
-    stdout: Literal["piped", "null"] = "piped"
-    stderr: Literal["piped", "null"] = "piped"
-    args: list[str] | None = None
-    env: dict[str, str] | None = None
-    clear_env: bool | None = None
-    cwd: str | None = None
-    stdin_stream_id: int | None = None
+    args: NotRequired[list[str] | None]
+    env: NotRequired[dict[str, str] | None]
+    clear_env: NotRequired[bool | None]
+    cwd: NotRequired[str | None]
+    stdin_stream_id: NotRequired[int | None]
+    stdout: NotRequired[Literal["piped", "null", "inherit"] | None]
+    stderr: NotRequired[Literal["piped", "null", "inherit"] | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class ProcessSpawnResult:
+class ProcessSpawnResult(TypedDict):
     pid: int
-    stdout_stream_id: int | None = None
-    stderr_stream_id: int | None = None
+    stdout_stream_id: NotRequired[int | None]
+    stderr_stream_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class WaitArgs:
+class WaitArgs(TypedDict):
     pid: int
-    vscode: bool | None = None
+    vscode: NotRequired[bool | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class ProcessWaitResult:
+class ProcessWaitResult(TypedDict):
     success: bool
     code: int
-    signal: str | None = None
+    signal: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class KillArgs:
+class KillArgs(TypedDict):
     pid: int
-    signal: str | None = None
-    vscode: bool | None = None
+    signal: NotRequired[str | None]
+    vscode: NotRequired[bool | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class RunArgs:
+class RunArgs(TypedDict):
     code: str
     extension: Literal["js", "cjs", "mjs", "ts", "cts", "mts", "jsx", "tsx"]
-    stdout: Literal["piped", "null"] = "piped"
-    stderr: Literal["piped", "null"] = "piped"
-    env: dict[str, str] | None = None
-    clear_env: bool | None = None
-    cwd: str | None = None
-    stdin_stream_id: int | None = None
-    script_args: list[str] | None = None
-    entrypoint: str | None = None
+    env: NotRequired[dict[str, str] | None]
+    clear_env: NotRequired[bool | None]
+    cwd: NotRequired[str | None]
+    stdin_stream_id: NotRequired[int | None]
+    stdout: NotRequired[Literal["piped", "null", "inherit"] | None]
+    stderr: NotRequired[Literal["piped", "null", "inherit"] | None]
+    script_args: NotRequired[list[str] | None]
+    entrypoint: NotRequired[str | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class DenoRunResult:
+class DenoRunResult(TypedDict):
     pid: int
-    stdout_stream_id: int | None = None
-    stderr_stream_id: int | None = None
+    stdout_stream_id: NotRequired[int | None]
+    stderr_stream_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class DenoHttpWaitArgs:
+class DenoHttpWaitArgs(TypedDict):
     pid: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SpawnDenoReplArgs:
-    stdout: Literal["piped", "null"] = "piped"
-    stderr: Literal["piped", "null"] = "piped"
-    env: dict[str, str] | None = None
-    clear_env: bool | None = None
-    cwd: str | None = None
-    stdin_stream_id: int | None = None
-    script_args: list[str] | None = None
+class SpawnDenoReplArgs(TypedDict):
+    env: NotRequired[dict[str, str] | None]
+    clear_env: NotRequired[bool | None]
+    cwd: NotRequired[str | None]
+    stdin_stream_id: NotRequired[int | None]
+    stdout: NotRequired[Literal["piped", "null", "inherit"] | None]
+    stderr: NotRequired[Literal["piped", "null", "inherit"] | None]
+    script_args: NotRequired[list[str] | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class DenoSpawnDenoReplResult:
+class DenoSpawnDenoReplResult(TypedDict):
     pid: int
-    stdout_stream_id: int | None = None
-    stderr_stream_id: int | None = None
+    stdout_stream_id: NotRequired[int | None]
+    stderr_stream_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class DenoReplCloseArgs:
+class DenoReplCloseArgs(TypedDict):
     pid: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class DenoReplEvalArgs:
+class DenoReplEvalArgs(TypedDict):
     pid: int
     code: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class DenoReplCallArgs:
+class DenoReplCallArgs(TypedDict):
     pid: int
     fn: str
     args: list[Any]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class FetchArgs:
+class FetchArgs(TypedDict):
     url: str
     method: str
     headers: dict[str, str]
     redirect: Literal["follow", "manual"]
-    abort_id: int | None = None
-    body_stream_id: int | None = None
-    pid: int | None = None
+    abort_id: NotRequired[int | None]
+    body_stream_id: NotRequired[int | None]
+    pid: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class NetFetchResult:
+class NetFetchResult(TypedDict):
     status: int
     status_text: str
     headers: dict[str, str]
-    body_stream_id: int | None = None
+    body_stream_id: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ExposeHttpArgs:
+class ExposeHttpArgs(TypedDict):
     domain: str
-    port: int | None = None
-    pid: int | None = None
+    port: NotRequired[int | None]
+    pid: NotRequired[int | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class ConnectArgs:
+class ConnectArgs(TypedDict):
     path: str
     extensions: list[str]
-    env: dict[str, str] | None = None
-    preview: str | None = None
-    disable_stop_button: bool | None = None
-    editor_settings: dict[str, Any] | None = None
+    env: NotRequired[dict[str, str] | None]
+    preview: NotRequired[str | None]
+    disable_stop_button: NotRequired[bool | None]
+    editor_settings: NotRequired[dict[str, Any] | None]
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass(frozen=True)
-class VscodeConnectResult:
+class VscodeConnectResult(TypedDict):
     pid: int
     port: int
     stdout_stream_id: int
     stderr_stream_id: int
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class GetArgs:
+class GetArgs(TypedDict):
     key: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class SetArgs:
+class SetArgs(TypedDict):
     key: str
     value: str
 
 
-@dataclass_json(letter_case=LetterCase.CAMEL)
-@dataclass
-class DeleteArgs:
+class DeleteArgs(TypedDict):
     key: str

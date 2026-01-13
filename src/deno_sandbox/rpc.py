@@ -8,6 +8,7 @@ from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.transport import WebSocketTransport
+from deno_sandbox.utils import convert_keys_camel, convert_to_snake
 
 
 @dataclass_json
@@ -55,7 +56,8 @@ class AsyncRpcClient:
         req_id = self._id + 1
         self._id = req_id
 
-        payload = RpcRequest(method=method, params=params, id=req_id)
+        camel_params = convert_keys_camel(params)
+        payload = RpcRequest(method=method, params=camel_params, id=req_id)
 
         future = self._loop.create_future()
         self._pending_requests[req_id] = future
@@ -82,7 +84,8 @@ class AsyncRpcClient:
                 if req_id is not None and req_id in self._pending_requests:
                     future = self._pending_requests.pop(req_id)
                     if not future.done():
-                        future.set_result(data)
+                        converted_data = convert_to_snake(data)
+                        future.set_result(converted_data)
 
                 elif "method" in data:
                     method = data["method"]

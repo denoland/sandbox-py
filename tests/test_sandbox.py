@@ -1,7 +1,6 @@
 import pytest
 
 from deno_sandbox import AsyncDenoDeploy, DenoDeploy
-from deno_sandbox.api_types_generated import WriteTextFileArgs, ReadTextFileArgs
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -51,15 +50,6 @@ def test_connect_sync():
 
         content = sandbox.fs.read_text_file({"path": "foo.txt"})
         assert content == "foo"
-
-
-@pytest.mark.asyncio(loop_scope="session")
-async def test_write_read_text_file_async_typed(async_shared_sandbox):
-    sb = async_shared_sandbox
-    path = "foo.txt"
-    await sb.fs.write_text_file(WriteTextFileArgs(path=path, content="foo"))
-    content = await sb.fs.read_text_file(ReadTextFileArgs(path=path))
-    assert content == "foo"
 
 
 @pytest.mark.asyncio(loop_scope="session")

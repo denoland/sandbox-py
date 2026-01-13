@@ -1,3 +1,4 @@
+from typing import Optional
 import httpx
 from pydantic import HttpUrl
 
@@ -5,8 +6,8 @@ from deno_sandbox.options import Options, get_internal_options
 
 
 class AsyncConsoleClient:
-    def __init__(self, options: Options):
-        self._options = get_internal_options(options or Options())
+    def __init__(self, options: Optional[Options] = None):
+        self._options = get_internal_options(options)
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -14,25 +15,25 @@ class AsyncConsoleClient:
             self._client = httpx.AsyncClient(
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self._options.token}",
+                    "Authorization": f"Bearer {self._options['token']}",
                 }
             )
         return self._client
 
     async def post(self, path: str, data: any) -> dict:
-        req_url = HttpUrl(self._options.console_url, path=path)
+        req_url = HttpUrl(self._options["console_url"], path=path)
         response = await self.client.post(req_url, json=data)
         response.raise_for_status()
         return response.json()
 
     async def get(self, path: str, search: dict | None = None) -> dict:
-        req_url = HttpUrl(self._options.console_url, path=path, search=search)
+        req_url = HttpUrl(self._options["console_url"], path=path, search=search)
         response = await self.client.get(req_url)
         response.raise_for_status()
         return response.json()
 
     async def delete(self, path: str) -> None:
-        req_url = HttpUrl(self._options.console_url, path=path)
+        req_url = HttpUrl(self._options["console_url"], path=path)
         response = await self.client.delete(req_url)
         response.raise_for_status()
 
@@ -47,30 +48,30 @@ class AsyncConsoleClient:
 
 
 class ConsoleClient:
-    def __init__(self, options: Options):
-        self._options = get_internal_options(options or Options())
+    def __init__(self, options: Optional[Options] = None):
+        self._options = get_internal_options(options)
 
         self.client = httpx.Client(
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self._options.token}",
+                "Authorization": f"Bearer {self._options['token']}",
             }
         )
 
     def post(self, path: str, data: any) -> dict:
-        req_url = HttpUrl(self._options.console_url, path=path)
+        req_url = HttpUrl(self._options["console_url"], path=path)
         response = self.client.post(req_url, json=data)
         response.raise_for_status()
         return response.json()
 
     def get(self, path: str, search: dict | None = None) -> dict:
-        req_url = HttpUrl(self._options.console_url, path=path, search=search)
+        req_url = HttpUrl(self._options["console_url"], path=path, search=search)
         response = self.client.get(req_url)
         response.raise_for_status()
         return response.json()
 
     def delete(self, path: str) -> None:
-        req_url = HttpUrl(self._options.console_url, path=path)
+        req_url = HttpUrl(self._options["console_url"], path=path)
         response = self.client.delete(req_url)
         response.raise_for_status()
 
