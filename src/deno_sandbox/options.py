@@ -26,7 +26,7 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
     token = options and options["token"] or os.environ.get("DENO_DEPLOY_TOKEN", "")
 
     scheme = url.scheme.replace("http", "ws")
-    sandbox_ws_url = Url(f"{scheme}://{url.netloc}/api/v2/sandbox/ws?format=json")
+    sandbox_ws_url = Url(f"{scheme}://{url.netloc}")
 
     console_url = os.environ.get("DENO_DEPLOY_CONSOLE_URL", "https://console.deno.com")
     parsed_console_url = urlparse(console_url)

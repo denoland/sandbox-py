@@ -1,4 +1,3 @@
-import asyncio
 from pydantic_core import Url
 from websockets import ConnectionClosed, connect
 
@@ -8,12 +7,6 @@ class WebSocketTransport:
         self._ws = await connect(str(url), additional_headers=headers)
 
     async def send(self, data: str) -> None:
-        if self._ws.loop != asyncio.get_running_loop():
-            print("DEBUG: Loop mismatch in WebSocketTransport.send")
-            # This is a debug check; if this triggers,
-            # pytest-asyncio has swapped the loop on you.
-            pass
-
         await self._ws.send(data)
 
     async def receive(self) -> dict[str, any]:

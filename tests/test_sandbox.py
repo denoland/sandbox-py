@@ -12,7 +12,6 @@ async def test_create_async():
         assert sandbox.id is not None
 
 
-@pytest.mark.asyncio(loop_scope="session")
 async def test_create_sync():
     sdk = DenoDeploy()
 
@@ -26,7 +25,7 @@ async def test_connect_async():
     sdk = AsyncDenoDeploy()
 
     async with sdk.sandbox.create() as sandbox:
-        async with sdk.sandbox.connect({"id": sandbox.id}) as connected_sandbox:
+        async with sdk.sandbox.connect(sandbox.id) as connected_sandbox:
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
@@ -42,7 +41,7 @@ def test_connect_sync():
     sdk = DenoDeploy()
 
     with sdk.sandbox.create() as sandbox:
-        with sdk.sandbox.connect({"id": sandbox.id}) as connected_sandbox:
+        with sdk.sandbox.connect(sandbox.id) as connected_sandbox:
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
@@ -73,7 +72,14 @@ def test_write_read_text_file_sync(shared_sandbox) -> None:
 async def test_spawn_async(async_shared_sandbox) -> None:
     sb = async_shared_sandbox
 
-    p = await sb.process.spawn({"command": "npx", "args": ["cowsay", "foo"]})
+    p = await sb.process.spawn(
+        {
+            "command": "npx",
+            "args": ["cowsay", "foo"],
+            "stdout": "piped",
+            "stderr": "piped",
+        }
+    )
     code = await p.wait()
     assert code == 0
 
@@ -86,7 +92,14 @@ async def test_spawn_async(async_shared_sandbox) -> None:
 async def test_spawn_sync(shared_sandbox) -> None:
     sb = shared_sandbox
 
-    p = sb.process.spawn({"command": "npx", "args": ["cowsay", "foo"]})
+    p = sb.process.spawn(
+        {
+            "command": "npx",
+            "args": ["cowsay", "foo"],
+            "stdout": "piped",
+            "stderr": "piped",
+        }
+    )
     code = p.wait()
     assert code == 0
 

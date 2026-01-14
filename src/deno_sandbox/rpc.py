@@ -1,9 +1,7 @@
 import asyncio
 import base64
-from dataclasses import dataclass
 import json
-from typing import Any, Dict
-from dataclasses_json import dataclass_json
+from typing import Any, Dict, TypedDict, cast
 from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
@@ -11,25 +9,19 @@ from deno_sandbox.transport import WebSocketTransport
 from deno_sandbox.utils import convert_keys_camel, convert_to_snake
 
 
-@dataclass_json
-@dataclass
-class RpcRequest:
+class RpcRequest(TypedDict):
     id: int
     method: str
     params: dict[str, Any]
     jsonrpc: str = "2.0"
 
 
-@dataclass_json
-@dataclass
-class RpcResult[T]:
+class RpcResult[T](TypedDict):
     ok: T | None = None
     error: Any | None = None
 
 
-@dataclass_json
-@dataclass
-class RpcResponse[T]:
+class RpcResponse[T](TypedDict):
     id: int
     jsonrpc: str = "2.0"
     result: RpcResult[T] | None = None
@@ -43,37 +35,40 @@ class AsyncRpcClient:
         self._pending_requests: Dict[int, asyncio.Future[Any]] = {}
         self._listen_task: asyncio.Task[Any] | None = None
         self._pending_processes: Dict[int, asyncio.StreamReader] = {}
-        self._loop = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def close(self):
         await self._transport.close()
 
     async def call(self, method: str, params: Dict[str, Any]) -> Any:
-        if self._listen_task is None or self._listen_task.done():
+        if self._loop is None:
             self._loop = asyncio.get_running_loop()
+
+        if self._listen_task is None or self._listen_task.done():
             self._listen_task = self._loop.create_task(self._listener())
 
         req_id = self._id + 1
         self._id = req_id
 
         camel_params = convert_keys_camel(params)
-        payload = RpcRequest(method=method, params=camel_params, id=req_id)
+        payload = RpcRequest(
+            method=method, params=camel_params, id=req_id, jsonrpc="2.0"
+        )
 
         future = self._loop.create_future()
         self._pending_requests[req_id] = future
 
-        await self._transport.send(payload.to_json())
+        await self._transport.send(json.dumps(payload))
 
         raw_response = await future
-        response = RpcResponse[Any].from_json(json.dumps(raw_response))
+        response = cast(RpcResponse[Any], raw_response)
 
-        if response.error:
-            raise Exception(response.error)
+        if response.get("error") is not None:
+            raise Exception(response["error"])
 
-        if response.result and response.result.error:
-            raise Exception(f"Application Error: {response.result.error}")
-
-        return response.result.ok if response.result else None
+        if response.get("result") and response["result"].get("error"):
+            raise Exception(f"Application Error: {response['result']['error']}")
+        return response["result"]["ok"] if response.get("result") else None
 
     async def _listener(self) -> None:
         try:
@@ -105,7 +100,6 @@ class AsyncRpcClient:
                             del self._pending_processes[stream_id]
 
         except ConnectionClosed:
-            print("Transport connection closed.")  # --- IGNORE ---
             pass
         except Exception as e:
             for future in self._pending_requests.values():
