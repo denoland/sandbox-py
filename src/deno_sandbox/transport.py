@@ -1,10 +1,20 @@
 from pydantic_core import Url
 from websockets import ConnectionClosed, connect
 
+from deno_sandbox.errors import AuthenticationError
+
 
 class WebSocketTransport:
     async def connect(self, url: Url, headers: dict[str, str]) -> None:
-        self._ws = await connect(str(url), additional_headers=headers)
+        try:
+            self._ws = await connect(str(url), additional_headers=headers)
+        except Exception as e:
+            if "HTTP 401" in str(e):
+                raise AuthenticationError(
+                    "Authentication failed, invalid API token"
+                ) from e
+
+            raise e
 
     async def send(self, data: str) -> None:
         await self._ws.send(data)

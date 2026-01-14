@@ -1,6 +1,7 @@
 import pytest
 
 from deno_sandbox import AsyncDenoDeploy, DenoDeploy
+from deno_sandbox.errors import RpcValidationError, UnknownRpcMethod
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -107,3 +108,15 @@ async def test_spawn_sync(shared_sandbox) -> None:
     stderr = p.stderr.read(-1)
     assert "foo" in stdout.decode()
     assert "will be installed" in stderr.decode()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_rpc_missing_method(async_shared_sandbox) -> None:
+    with pytest.raises(UnknownRpcMethod):
+        await async_shared_sandbox._rpc.call("non_existent_method", {})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_rpc_wrong_params(async_shared_sandbox) -> None:
+    with pytest.raises(RpcValidationError):
+        await async_shared_sandbox._rpc.call("readTextFile", {})

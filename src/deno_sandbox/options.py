@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from pydantic_core import Url
 
+from deno_sandbox.errors import MissingApiToken
+
 
 class Options(TypedDict):
     token: str | Url | None = None
@@ -23,7 +25,10 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
         os.environ.get("DENO_DEPLOY_URL", "https://ams.sandbox-api.deno.net")
     )
 
-    token = options and options["token"] or os.environ.get("DENO_DEPLOY_TOKEN", "")
+    token = options and options["token"] or os.environ.get("DENO_DEPLOY_TOKEN", None)
+
+    if token is None:
+        raise MissingApiToken({"message": "DENO_DEPLOY_TOKEN is not set"})
 
     scheme = url.scheme.replace("http", "ws")
     sandbox_ws_url = Url(f"{scheme}://{url.netloc}")

@@ -5,8 +5,9 @@ from typing import Any, Dict, TypedDict, cast
 from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
+from deno_sandbox.errors import RpcValidationError, UnknownRpcMethod, ZodErrorRaw
 from deno_sandbox.transport import WebSocketTransport
-from deno_sandbox.utils import convert_keys_camel, convert_to_snake
+from deno_sandbox.utils import convert_keys_camel, convert_to_snake, to_snake_case
 
 
 class RpcRequest(TypedDict):
@@ -64,6 +65,23 @@ class AsyncRpcClient:
         response = cast(RpcResponse[Any], raw_response)
 
         if response.get("error") is not None:
+            if response["error"].get("code") == -32602:
+                raise UnknownRpcMethod("RPC method not found")
+
+            if response["error"].get("data") is not None:
+                data = response["error"]["data"]
+                if data.get("constructor_name") == "ZodError":
+                    # For some reason ZodError data is serialized as
+                    # json inside json ¯\_(ツ)_/¯
+                    zod_errors: list[ZodErrorRaw] = []
+                    for e in json.loads(data["message"]):
+                        value = cast(ZodErrorRaw, e)
+
+                        value["path"] = [to_snake_case(p) for p in value["path"]]
+                        zod_errors.append(value)
+
+                    raise RpcValidationError(zod_errors)
+
             raise Exception(response["error"])
 
         if response.get("result") and response["result"].get("error"):
