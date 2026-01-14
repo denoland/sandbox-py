@@ -16,14 +16,14 @@ from typing import (
 from typing_extensions import Literal
 
 from deno_sandbox.api_generated import (
-    AsyncSandboxDenoCli,
+    AsyncSandboxDeno,
     AsyncSandboxEnv,
     AsyncSandboxFs,
     AsyncSandboxNet,
     AsyncSandboxVSCode,
     AsyncSandboxProcess as GeneratedAsyncSandboxProcess,
     SandboxProcess as GeneratedSandboxProcess,
-    SandboxDenoCli,
+    SandboxDeno,
     SandboxEnv,
     SandboxFs,
     SandboxNet,
@@ -37,9 +37,10 @@ from deno_sandbox.api_types_generated import (
     SandboxConnectOptions,
     SandboxMeta,
     SpawnArgs,
+    SpawnOptions,
 )
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.console import ConsoleClient
+from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
 from deno_sandbox.options import Options, get_internal_options
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.transport import (
@@ -72,12 +73,12 @@ class AppConfig(TypedDict):
     secrets: NotRequired[dict[str, SecretConfig] | None]
 
 
-class Sandbox:
+class SandboxApi:
     def __init__(self, options: Options | None = None):
         self.__options = get_internal_options(options or Options())
         self._client = ConsoleClient(options)
         self._bridge = AsyncBridge()
-        self._async_sandbox = AsyncSandboxHandle(self.__options)
+        self._async_sandbox = AsyncSandbox(self.__options)
 
     @contextmanager
     def create(self, options: Optional[SandboxCreateOptions]):
@@ -87,7 +88,7 @@ class Sandbox:
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield SandboxHandle(rpc, async_handle.id)
+            yield Sandbox(rpc, async_handle.id)
         finally:
             self._bridge.run(async_cm.__aexit__(None, None, None))
 
@@ -95,11 +96,8 @@ class Sandbox:
         result = self._client.sandboxes_list(options.to_dict())
         return [cast(SandboxMeta, i) for i in result]
 
-    def close(self):
-        self._bridge.stop()
 
-
-class AsyncSandboxWrapper:
+class AsyncSandboxApi:
     def __init__(
         self,
         options: Optional[Options] = None,
@@ -110,7 +108,7 @@ class AsyncSandboxWrapper:
     @asynccontextmanager
     async def create(
         self, options: Optional[SandboxCreateOptions] = None
-    ) -> AsyncIterator[AsyncSandboxHandle]:
+    ) -> AsyncIterator[AsyncSandbox]:
         """Creates a new sandbox instance."""
 
         app_config: AppConfig = {
@@ -139,12 +137,12 @@ class AsyncSandboxWrapper:
 
         try:
             self._rpc = AsyncRpcClient(transport)
-            yield AsyncSandboxHandle(self._rpc, sandbox_id)
+            yield AsyncSandbox(self._rpc, sandbox_id)
         finally:
             await transport.close()
 
     @asynccontextmanager
-    async def connect(self, sandbox_id: str) -> AsyncIterator[AsyncSandboxHandle]:
+    async def connect(self, sandbox_id: str) -> AsyncIterator[AsyncSandbox]:
         """Connects to an existing sandbox instance."""
 
         url = f"{self._options['sandbox_ws_url']}api/v3/sandbox/{sandbox_id}/connect"
@@ -158,7 +156,7 @@ class AsyncSandboxWrapper:
 
         try:
             rpc = AsyncRpcClient(transport)
-            yield AsyncSandboxHandle(rpc, sandbox_id)
+            yield AsyncSandbox(rpc, sandbox_id)
         finally:
             await transport.close()
 
@@ -169,7 +167,7 @@ class AsyncSandboxWrapper:
 
 
 class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
-    async def spawn(self, args: SpawnArgs) -> AsyncRemoteProcess:
+    async def spawn(self, args: SpawnArgs) -> AsyncChildProcess:
         options: RemoteProcessOptions = {
             "stdout_inherit": args.get("stdout", "inherit") == "inherit",
             "stderr_inherit": args.get("stderr", "inherit") == "inherit",
@@ -181,11 +179,11 @@ class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
             args["stderr"] = "piped"
 
         result: ProcessSpawnResult = await super().spawn(args)
-        return await AsyncRemoteProcess.create(result, self._rpc, options)
+        return await AsyncChildProcess.create(result, self._rpc, options)
 
 
 class SandboxProcess(GeneratedSandboxProcess):
-    def spawn(self, args: SpawnArgs) -> RemoteProcess:
+    def spawn(self, args: SpawnArgs) -> ChildProcess:
         options: RemoteProcessOptions = {
             "stdout_inherit": args.get("stdout", "inherit") == "inherit",
             "stderr_inherit": args.get("stderr", "inherit") == "inherit",
@@ -198,9 +196,9 @@ class SandboxProcess(GeneratedSandboxProcess):
 
         result: ProcessSpawnResult = super().spawn(args)
         async_proc = self._rpc._bridge.run(
-            AsyncRemoteProcess.create(result, self._rpc._async_client, options)
+            AsyncChildProcess.create(result, self._rpc._async_client, options)
         )
-        return RemoteProcess(result, self._rpc, async_proc)
+        return ChildProcess(result, self._rpc, async_proc)
 
 
 class RemoteProcessOptions(TypedDict):
@@ -208,7 +206,7 @@ class RemoteProcessOptions(TypedDict):
     stderr_inherit: bool
 
 
-class AsyncRemoteProcess:
+class AsyncChildProcess:
     def __init__(
         self,
         pid: int,
@@ -225,7 +223,7 @@ class AsyncRemoteProcess:
     @classmethod
     async def create(
         cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
-    ) -> AsyncRemoteProcess:
+    ) -> AsyncChildProcess:
         pid = res["pid"]
 
         stdout = asyncio.StreamReader()
@@ -283,12 +281,12 @@ class SyncStreamReader:
         return self._bridge.run(self._reader.readexactly(n))
 
 
-class RemoteProcess:
+class ChildProcess:
     def __init__(
         self,
         res: ProcessSpawnResult,
         rpc: RpcClient,
-        async_proc: AsyncRemoteProcess,
+        async_proc: AsyncChildProcess,
     ):
         self.pid = res["pid"]
         self._rpc = rpc
@@ -304,28 +302,125 @@ class RemoteProcess:
         return result
 
 
-class AsyncSandboxHandle:
-    def __init__(self, rpc: AsyncRpcClient, sandbox_id: str):
+class VsCodeOptions(TypedDict):
+    env: NotRequired[dict[str, str] | None]
+    """Environment variables to pass to the VS Code instance."""
+
+    extensions: NotRequired[list[str] | None]
+    """
+    The extensions to be loaded in the VSCode instance.
+   
+    The accepted values are:
+    - an extension id
+    - Coder extension marketplace
+    - path to a .vsix file
+    """
+
+    preview: NotRequired[bool | None]
+    """A URL of a page to load a preview window of inside the VSCode instance."""
+
+    disable_stop_button: NotRequired[bool | None]
+    """If true, the stop button in the VSCode instance will be disabled. Default: false"""
+
+    editor_settings: NotRequired[dict[str, Any] | None]
+    """The value for the default settings.json that VSCode will use."""
+
+
+class AsyncSandbox:
+    def __init__(
+        self, client: AsyncConsoleClient, rpc: AsyncRpcClient, sandbox_id: str
+    ):
+        self._client = client
         self._rpc = rpc
+
+        self.url: str | None = None
+        self.ssh: None = None
         self.id = sandbox_id
         self.fs = AsyncSandboxFs(rpc)
-        self.net = AsyncSandboxNet(rpc)
-        self.deno = AsyncSandboxDenoCli(rpc)
-        self.vscode = AsyncSandboxVSCode(rpc)
+        self.deno = AsyncSandboxDeno(rpc)
         self.env = AsyncSandboxEnv(rpc)
+        self.vscode = AsyncSandboxVSCode(rpc)
         self.process = AsyncSandboxProcess(rpc)
 
-    async def abort(self) -> None:
+    @property
+    def closed(self) -> bool:
+        return self._rpc._transport.closed
+
+    async def spawn(command: str, options: Optional[SpawnOptions]) -> AsyncChildProcess:
+        pass
+
+    # FIXME
+    async def fetch() -> Any:
+        pass
+
+    async def close(self) -> None:
+        await self._rpc.close()
+
+    async def kill(self) -> None:
         await self._rpc.call("abort", {"abortId": self.id})
 
+    async def extend_timeout(self, additional_s: int) -> None:
+        pass
 
-class SandboxHandle:
+    async def expose_http(self, portOrPid: int) -> str:
+        pass
+
+    async def expose_ssh(self, portOrPid: int) -> str:
+        pass
+
+    async def expose_vscode(
+        self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
+    ) -> AsyncVsCode:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+
+class AsyncVsCode:
+    """Experimental! A VSCode instance running inside the sandbox."""
+
+    def __init__(self, rpc: RpcClient, url: str):
+        self._rpc = rpc
+        self.url = url
+
+    @property
+    def stdout(self):
+        # FIXME
+        pass
+
+    @property
+    def stderr(self):
+        # FIXME
+        pass
+
+    @property
+    def status(self):
+        # FIXME
+        pass
+
+    async def kill(self) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.kill()
+        await self.status
+
+
+class Sandbox:
     def __init__(self, rpc: RpcClient, sandbox_id: str):
         self._rpc = rpc
+        self.url: str | None = None
         self.id = sandbox_id
         self.fs = SandboxFs(rpc)
         self.net = SandboxNet(rpc)
-        self.deno = SandboxDenoCli(rpc)
+        self.deno = SandboxDeno(rpc)
         self.vscode = SandboxVSCode(rpc)
         self.env = SandboxEnv(rpc)
         self.process = SandboxProcess(rpc)
@@ -337,19 +432,19 @@ class SandboxHandle:
 class SandboxWrapper:
     def __init__(self, options: Optional[Options] = None):
         self._bridge = AsyncBridge()
-        self._async_sandbox = AsyncSandboxWrapper(options)
+        self._async_sandbox = AsyncSandboxApi(options)
 
     @contextmanager
     def create(
         self, options: Optional[SandboxCreateOptions] = None
-    ) -> Generator[SandboxHandle, Any, Any]:
+    ) -> Generator[Sandbox, Any, Any]:
         async_cm = self._async_sandbox.create(options)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield SandboxHandle(rpc, async_handle.id)
+            yield Sandbox(rpc, async_handle.id)
         except Exception:
             import sys
 
@@ -366,7 +461,7 @@ class SandboxWrapper:
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield SandboxHandle(rpc, async_handle.id)
+            yield Sandbox(rpc, async_handle.id)
         except Exception:
             import sys
 

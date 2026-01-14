@@ -7,7 +7,11 @@ from websockets import ConnectionClosed
 from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.errors import RpcValidationError, UnknownRpcMethod, ZodErrorRaw
 from deno_sandbox.transport import WebSocketTransport
-from deno_sandbox.utils import convert_keys_camel, convert_to_snake, to_snake_case
+from deno_sandbox.utils import (
+    convert_to_camel_case,
+    convert_to_snake_case,
+    to_snake_case,
+)
 
 
 class RpcRequest(TypedDict):
@@ -51,7 +55,7 @@ class AsyncRpcClient:
         req_id = self._id + 1
         self._id = req_id
 
-        camel_params = convert_keys_camel(params)
+        camel_params = convert_to_camel_case(params)
         payload = RpcRequest(
             method=method, params=camel_params, id=req_id, jsonrpc="2.0"
         )
@@ -97,7 +101,7 @@ class AsyncRpcClient:
                 if req_id is not None and req_id in self._pending_requests:
                     future = self._pending_requests.pop(req_id)
                     if not future.done():
-                        converted_data = convert_to_snake(data)
+                        converted_data = convert_to_snake_case(data)
                         future.set_result(converted_data)
 
                 elif "method" in data:

@@ -10,7 +10,7 @@ from deno_sandbox.api_generated import (
     VolumesApi,
 )
 from deno_sandbox.sandbox import (
-    AsyncSandboxWrapper,
+    AsyncSandboxApi,
     SandboxWrapper,
 )
 from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
@@ -35,5 +35,5 @@ class AsyncDenoDeploy:
         self.apps = AsyncAppsApi(client)
         self.revisions = AsyncRevisionsApi(client)
         self.timelines = AsyncTimelinesApi(client)
-        self.sandbox = AsyncSandboxWrapper(options)
+        self.sandbox = AsyncSandboxApi(options)
         self.volumes = AsyncVolumesApi(client)

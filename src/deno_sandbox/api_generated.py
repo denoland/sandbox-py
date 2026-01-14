@@ -13,738 +13,913 @@ from deno_sandbox.api_types_generated import (
     RevisionListOptions,
     RevisionWithoutTimelines,
     TimelineListOptions,
-    VolumesOptions,
+    VolumeInit,
     Volume,
     VolumeListOptions,
-    AbortArgs,
-    ReadFileArgs,
-    ReadTextFileArgs,
-    WriteFileArgs,
-    WriteTextFileArgs,
-    ReadDirArgs,
-    ReadDirEntry,
-    RemoveArgs,
-    MkdirArgs,
-    RenameArgs,
-    CopyFileArgs,
-    LinkArgs,
-    LstatArgs,
-    FsLstatResult,
-    MakeTempDirArgs,
-    MakeTempFileArgs,
-    ReadLinkArgs,
-    RealPathArgs,
-    SymlinkArgs,
-    TruncateArgs,
-    UmaskArgs,
-    UtimeArgs,
-    OpenArgs,
-    FsOpenResult,
-    CreateArgs,
-    FsCreateResult,
-    FileCloseArgs,
-    FileLockArgs,
-    FileReadArgs,
-    FsFileReadResult,
-    FileSeekArgs,
-    FsFileSeekResult,
-    FileStatArgs,
-    FileHandleStat,
-    FileSyncArgs,
-    FileSyncDataArgs,
-    FileTruncateArgs,
-    FileUnlockArgs,
-    FileUtimeArgs,
-    FileWriteArgs,
-    FsFileWriteResult,
-    WalkArgs,
-    ExpandGlobArgs,
-    SpawnArgs,
-    ProcessSpawnResult,
-    WaitArgs,
-    ProcessWaitResult,
-    KillArgs,
-    RunArgs,
-    DenoRunResult,
-    DenoHttpWaitArgs,
-    SpawnDenoReplArgs,
-    DenoSpawnDenoReplResult,
-    DenoReplCloseArgs,
-    DenoReplEvalArgs,
-    DenoReplCallArgs,
-    FetchArgs,
-    NetFetchResult,
-    ExposeHttpArgs,
-    ConnectArgs,
-    VscodeConnectResult,
-    GetArgs,
-    SetArgs,
-    DeleteArgs,
+    ReadFileOptions,
+    WriteFileOptions,
+    DirEntry,
+    RemoveOptions,
+    MkdirOptions,
+    FileInfo,
+    WalkOptions,
+    WalkEntry,
+    ExpandGlobOptions,
+    MakeTempDirOptions,
+    MakeTempFileOptions,
+    FsOpenOptions,
+    SymlinkOptions,
+    DenoRunOptions,
+    DenoReplOptions,
+    DeployOptions,
 )
 
-from deno_sandbox.rpc import AsyncRpcClient, RpcClient
+from deno_sandbox.rpc import RpcClient, AsyncRpcClient
+from deno_sandbox.utils import convert_to_camel_case, convert_to_snake_case
 from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
+from deno_sandbox.wrappers import (
+    FsFile,
+    AsyncFsFile,
+    DenoProcess,
+    AsyncDenoProcess,
+    DenoRepl,
+    AsyncDenoRepl,
+)
 
 
-class AppsApi:
+class Apps:
     def __init__(self, client: ConsoleClient):
         self._client = client
 
-    def get(self, app_id_or_slug: str) -> App:
-        result = self._client.apps_get(app_id_or_slug)
-        return cast(App, result)
+    def get(self, id_or_slug: str) -> App:
+        """Get an app by its ID or slug."""
+
+        result = self._client._apps_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
 
     def list(self, options: Optional[AppListOptions] = None) -> PaginatedList[App]:
-        result = self._client.apps_list(options)
-        return cast(PaginatedList[App], result)
+        """List apps of an org."""
+
+        result = self._client._apps_list(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[App], raw_result)
 
     def create(self, options: AppInit) -> App:
-        result = self._client.apps_create(options)
-        return cast(App, result)
+        """Create a new app."""
 
-    def update(self, id_or_slug: str, update: AppUpdate) -> App:
-        result = self._client.apps_update(id_or_slug, update)
-        return cast(App, result)
+        result = self._client._apps_create(options)
 
-    def delete(self, id_or_slug: str) -> None:
-        self._client.apps_delete(id_or_slug)
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    def update(self, app: str, update: AppUpdate) -> App:
+        """Update an existing app."""
+
+        result = self._client._apps_update(app, update)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    def delete(self, app: str) -> None:
+        """Delete an app by its ID or slug."""
+
+        self._client._apps_delete(app)
 
 
-class AsyncAppsApi:
+class AsyncApps:
     def __init__(self, client: AsyncConsoleClient):
         self._client = client
 
-    async def get(self, app_id_or_slug: str) -> App:
-        result = await self._client.apps_get(app_id_or_slug)
-        return cast(App, result)
+    async def get(self, id_or_slug: str) -> App:
+        """Get an app by its ID or slug."""
+
+        result = await self._client._apps_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
 
     async def list(
         self, options: Optional[AppListOptions] = None
     ) -> PaginatedList[App]:
-        result = await self._client.apps_list(options)
-        return cast(PaginatedList[App], result)
+        """List apps of an org."""
+
+        result = await self._client._apps_list(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[App], raw_result)
 
     async def create(self, options: AppInit) -> App:
-        result = await self._client.apps_create(options)
-        return cast(App, result)
+        """Create a new app."""
 
-    async def update(self, id_or_slug: str, update: AppUpdate) -> App:
-        result = await self._client.apps_update(id_or_slug, update)
-        return cast(App, result)
+        result = await self._client._apps_create(options)
 
-    async def delete(self, id_or_slug: str) -> None:
-        await self._client.apps_delete(id_or_slug)
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    async def update(self, app: str, update: AppUpdate) -> App:
+        """Update an existing app."""
+
+        result = await self._client._apps_update(app, update)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    async def delete(self, app: str) -> None:
+        """Delete an app by its ID or slug."""
+
+        await self._client._apps_delete(app)
 
 
-class RevisionsApi:
+class Revisions:
     def __init__(self, client: ConsoleClient):
         self._client = client
 
-    def get(self, app: str) -> Revision:
-        result = self._client.revisions_get(app)
-        return cast(Revision, result)
+    def get(self, app: str, id: str) -> Revision:
+        """Get a revision by its ID for a specific app."""
+
+        result = self._client._revisions_get(app, id)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Revision, raw_result)
 
     def list(
-        self, app_id_or_slug: str, options: Optional[RevisionListOptions] = None
+        self, app: str, options: Optional[RevisionListOptions] = None
     ) -> PaginatedList[RevisionWithoutTimelines]:
-        result = self._client.revisions_list(app_id_or_slug, options)
-        return cast(PaginatedList[RevisionWithoutTimelines], result)
+        """List revisions for a specific app."""
+
+        result = self._client._revisions_list(app, options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[RevisionWithoutTimelines], raw_result)
 
 
-class AsyncRevisionsApi:
+class AsyncRevisions:
     def __init__(self, client: AsyncConsoleClient):
         self._client = client
 
-    async def get(self, app: str) -> Revision:
-        result = await self._client.revisions_get(app)
-        return cast(Revision, result)
+    async def get(self, app: str, id: str) -> Revision:
+        """Get a revision by its ID for a specific app."""
+
+        result = await self._client._revisions_get(app, id)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Revision, raw_result)
 
     async def list(
-        self, app_id_or_slug: str, options: Optional[RevisionListOptions] = None
+        self, app: str, options: Optional[RevisionListOptions] = None
     ) -> PaginatedList[RevisionWithoutTimelines]:
-        result = await self._client.revisions_list(app_id_or_slug, options)
-        return cast(PaginatedList[RevisionWithoutTimelines], result)
+        """List revisions for a specific app."""
+
+        result = await self._client._revisions_list(app, options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[RevisionWithoutTimelines], raw_result)
 
 
-class TimelinesApi:
+class Timelines:
     def __init__(self, client: ConsoleClient):
         self._client = client
 
     def list(
-        self, app_id_or_slug: str, options: Optional[TimelineListOptions] = None
+        self, app: str, options: Optional[TimelineListOptions] = None
     ) -> PaginatedList[Timeline]:
-        result = self._client.timelines_list(app_id_or_slug, options)
-        return cast(PaginatedList[Timeline], result)
+        """List timelines for a specific app."""
+
+        result = self._client._timelines_list(app, options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[Timeline], raw_result)
 
 
-class AsyncTimelinesApi:
+class AsyncTimelines:
     def __init__(self, client: AsyncConsoleClient):
         self._client = client
 
     async def list(
-        self, app_id_or_slug: str, options: Optional[TimelineListOptions] = None
+        self, app: str, options: Optional[TimelineListOptions] = None
     ) -> PaginatedList[Timeline]:
-        result = await self._client.timelines_list(app_id_or_slug, options)
-        return cast(PaginatedList[Timeline], result)
+        """List timelines for a specific app."""
+
+        result = await self._client._timelines_list(app, options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[Timeline], raw_result)
 
 
-class VolumesApi:
+class Volumes:
     def __init__(self, client: ConsoleClient):
         self._client = client
 
-    def create(self, options: VolumesOptions) -> Volume:
-        result = self._client.volumes_create(options)
-        return cast(Volume, result)
+    def create(self, options: VolumeInit) -> Volume:
+        """Create a new volume."""
+
+        result = self._client._volumes_create(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Volume, raw_result)
 
     def get(self, id_or_slug: str) -> Volume:
-        result = self._client.volumes_get(id_or_slug)
-        return cast(Volume, result)
+        """Get volume info by ID or slug."""
+
+        result = self._client._volumes_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Volume, raw_result)
 
     def list(
         self, options: Optional[VolumeListOptions] = None
     ) -> PaginatedList[Volume]:
-        result = self._client.volumes_list(options)
-        return cast(PaginatedList[Volume], result)
+        result = self._client._volumes_list(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[Volume], raw_result)
 
     def delete(self, id_or_slug: str) -> None:
-        self._client.volumes_delete(id_or_slug)
+        """Delete volume by ID or slug."""
+
+        self._client._volumes_delete(id_or_slug)
 
 
-class AsyncVolumesApi:
+class AsyncVolumes:
     def __init__(self, client: AsyncConsoleClient):
         self._client = client
 
-    async def create(self, options: VolumesOptions) -> Volume:
-        result = await self._client.volumes_create(options)
-        return cast(Volume, result)
+    async def create(self, options: VolumeInit) -> Volume:
+        """Create a new volume."""
+
+        result = await self._client._volumes_create(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Volume, raw_result)
 
     async def get(self, id_or_slug: str) -> Volume:
-        result = await self._client.volumes_get(id_or_slug)
-        return cast(Volume, result)
+        """Get volume info by ID or slug."""
+
+        result = await self._client._volumes_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Volume, raw_result)
 
     async def list(
         self, options: Optional[VolumeListOptions] = None
     ) -> PaginatedList[Volume]:
-        result = await self._client.volumes_list(options)
-        return cast(PaginatedList[Volume], result)
+        result = await self._client._volumes_list(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(PaginatedList[Volume], raw_result)
 
     async def delete(self, id_or_slug: str) -> None:
-        await self._client.volumes_delete(id_or_slug)
+        """Delete volume by ID or slug."""
 
-
-class Sandbox:
-    def __init__(self, rpc: RpcClient):
-        self._rpc = rpc
-
-    def abort(self, args: AbortArgs) -> None:
-        self._rpc.call("abort", args)
-
-
-class AsyncSandbox:
-    def __init__(self, rpc: AsyncRpcClient):
-        self._rpc = rpc
-
-    async def abort(self, args: AbortArgs) -> None:
-        await self._rpc.call("abort", args)
+        await self._client._volumes_delete(id_or_slug)
 
 
 class SandboxFs:
-    def __init__(self, rpc: RpcClient):
+    def __init__(self, client: ConsoleClient, rpc: RpcClient):
+        self._client = client
         self._rpc = rpc
 
-    def read_file(self, args: ReadFileArgs) -> None:
+    def read_file(self, path: str, options: Optional[ReadFileOptions] = None) -> bytes:
         """Reads the entire contents of a file as bytes."""
 
-        self._rpc.call("readFile", args)
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def read_text_file(self, args: ReadTextFileArgs) -> str:
-        """Reads the entire contents of a file as an UTF-8 decoded string."""
+        result = self._rpc.call("readFile", params)
 
-        result = self._rpc.call("readTextFile", args)
         return result
 
-    def write_file(self, args: WriteFileArgs) -> None:
+    def write_file(
+        self, path: str, data: bytes, options: Optional[WriteFileOptions] = None
+    ) -> None:
         """Write bytes to file. Creates a new file if needed. Existing files will be overwritten."""
 
-        self._rpc.call("writeFile", args)
+        params = {"path": path, "data": data}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def write_text_file(self, args: WriteTextFileArgs) -> None:
+        self._rpc.call("writeFile", params)
+
+    def read_text_file(
+        self, path: str, options: Optional[ReadFileOptions] = None
+    ) -> str:
+        """Reads the entire contents of a file as an UTF-8 decoded string."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("readTextFile", params)
+
+        return result
+
+    def write_text_file(
+        self, path: str, data: str, options: Optional[WriteFileOptions] = None
+    ) -> None:
         """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
 
-        self._rpc.call("writeTextFile", args)
+        params = {"path": path, "data": data}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def read_dir(self, args: ReadDirArgs) -> list[ReadDirEntry]:
+        self._rpc.call("writeTextFile", params)
+
+    def read_dir(self, path: str) -> list[DirEntry]:
         """Read the directory entries at the given path."""
 
-        result = self._rpc.call("readDir", args)
-        return [cast(ReadDirEntry, i) for i in result]
+        params = {"path": path}
+        result = self._rpc.call("readDir", params)
 
-    def remove(self, args: RemoveArgs) -> None:
+        return result
+
+    def remove(self, path: str, options: Optional[RemoveOptions] = None) -> None:
         """Remove the file or directory at the given path."""
 
-        self._rpc.call("remove", args)
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def mkdir(self, args: MkdirArgs) -> None:
+        self._rpc.call("remove", params)
+
+    def mkdir(self, path: str, options: Optional[MkdirOptions] = None) -> None:
         """Create a new directory at the specified path."""
 
-        self._rpc.call("mkdir", args)
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def rename(self, args: RenameArgs) -> None:
+        self._rpc.call("mkdir", params)
+
+    def rename(self, old_path: str, new_path: str) -> None:
         """Rename (move) a file or directory."""
 
-        self._rpc.call("rename", args)
+        params = {"oldPath": old_path, "newPath": new_path}
+        self._rpc.call("rename", params)
 
-    def copy_file(self, args: CopyFileArgs) -> None:
-        """Copy a file from one location to another."""
+    def stat(self, path: str) -> FileInfo:
+        """Return file information about a file or directory."""
 
-        self._rpc.call("copyFile", args)
+        params = {"path": path}
+        result = self._rpc.call("stat", params)
 
-    def link(self, args: LinkArgs) -> None:
+        raw_result = convert_to_snake_case(result)
+        return cast(FileInfo, raw_result)
+
+    def chmod(self, path: str, mode: int) -> None:
+        """Change the permission mode of a file or directory."""
+
+        params = {"path": path, "mode": mode}
+        self._rpc.call("chmod", params)
+
+    def chown(
+        self, path: str, uid: Optional[int] = None, gid: Optional[int] = None
+    ) -> None:
+        """Change the owner user ID and group ID of a file or directory."""
+
+        params = {"path": path, "uid": uid, "gid": gid}
+        self._rpc.call("chown", params)
+
+    def copy_file(self, from_path: str, to_path: str) -> None:
+        """Copy a file from a source path to a destination path."""
+
+        params = {"fromPath": from_path, "toPath": to_path}
+        self._rpc.call("copyFile", params)
+
+    def walk(self, path: str, options: Optional[WalkOptions] = None) -> list[WalkEntry]:
+        """Recursively walk a directory tree."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("walk", params)
+
+        return result
+
+    def expand_glob(
+        self, glob: str, options: Optional[ExpandGlobOptions] = None
+    ) -> list[str]:
+        """Expand a glob pattern to a list of paths."""
+
+        params = {"glob": glob}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("expandGlob", params)
+
+        return result
+
+    def create(self, path: str) -> FsFile:
+        """Create a new empty file at the specified path."""
+
+        params = {"path": path}
+        result = self._rpc.call("create", params)
+
+        return result
+
+    def link(self, target: str, path: str) -> None:
         """Create a hard link pointing to an existing file."""
 
-        self._rpc.call("link", args)
+        params = {"target": target, "path": path}
+        self._rpc.call("link", params)
 
-    def lstat(self, args: LstatArgs) -> FsLstatResult:
+    def lstat(self, path: str) -> FileInfo:
         """Return file information about a file or directory symlink."""
 
-        result = self._rpc.call("lstat", args)
-        return cast(FsLstatResult, result)
+        params = {"path": path}
+        result = self._rpc.call("lstat", params)
 
-    def make_temp_dir(self, args: MakeTempDirArgs) -> str:
+        raw_result = convert_to_snake_case(result)
+        return cast(FileInfo, raw_result)
+
+    def make_temp_dir(self, options: Optional[MakeTempDirOptions] = None) -> str:
         """Create a new temporary directory."""
 
-        result = self._rpc.call("makeTempDir", args)
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("makeTempDir", params)
+
         return result
 
-    def make_temp_file(self, args: MakeTempFileArgs) -> str:
+    def make_temp_file(self, options: Optional[MakeTempFileOptions] = None) -> str:
         """Create a new temporary file."""
 
-        result = self._rpc.call("makeTempFile", args)
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("makeTempFile", params)
+
         return result
 
-    def read_link(self, args: ReadLinkArgs) -> str:
+    def open(self, path: str, options: Optional[FsOpenOptions] = None) -> FsFile:
+        """Open a file and return a file descriptor."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("open", params)
+
+        return result
+
+    def read_link(self, path: str) -> str:
         """Read the target of a symbolic link."""
 
-        result = self._rpc.call("readLink", args)
+        params = {"path": path}
+        result = self._rpc.call("readLink", params)
+
         return result
 
-    def real_path(self, args: RealPathArgs) -> str:
+    def real_path(self, path: str) -> str:
         """Return the canonicalized absolute pathname."""
 
-        result = self._rpc.call("realPath", args)
+        params = {"path": path}
+        result = self._rpc.call("realPath", params)
+
         return result
 
-    def symlink(self, args: SymlinkArgs) -> None:
+    def symlink(
+        self, target: str, path: str, options: Optional[SymlinkOptions] = None
+    ) -> None:
         """Create a symbolic link."""
 
-        self._rpc.call("symlink", args)
+        params = {"target": target, "path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def truncate(self, args: TruncateArgs) -> None:
+        self._rpc.call("symlink", params)
+
+    def truncate(self, name: str, length: Optional[int] = None) -> None:
         """Truncate or extend the specified file to reach a given size."""
 
-        self._rpc.call("truncate", args)
+        params = {"name": name, "length": length}
+        self._rpc.call("truncate", params)
 
-    def umask(self, args: UmaskArgs) -> int:
+    def umask(self, mask: Optional[int] = None) -> int:
         """Sets the process's file mode creation mask."""
 
-        result = self._rpc.call("umask", args)
+        params = {"mask": mask}
+        result = self._rpc.call("umask", params)
+
         return result
 
-    def utime(self, args: UtimeArgs) -> None:
+    def utime(self, path: str, atime: str, mtime: str) -> None:
         """Change the access and modification times of a file."""
 
-        self._rpc.call("utime", args)
+        params = {"path": path, "atime": atime, "mtime": mtime}
+        self._rpc.call("utime", params)
 
-    def open(self, args: OpenArgs) -> FsOpenResult:
-        """Open a file and return a file handle id."""
+    def upload(self, local_path: str, sandbox_path: str) -> None:
+        """Upload a file or directory to the sandbox."""
 
-        result = self._rpc.call("open", args)
-        return cast(FsOpenResult, result)
+        params = {"localPath": local_path, "sandboxPath": sandbox_path}
+        self._rpc.call("upload", params)
 
-    def create(self, args: CreateArgs) -> FsCreateResult:
-        """Create a new file and return a file handle id."""
+    def download(self, local_path: str, sandbox_path: str) -> None:
+        """Download a file or directory from the sandbox."""
 
-        result = self._rpc.call("create", args)
-        return cast(FsCreateResult, result)
-
-    def file_close(self, args: FileCloseArgs) -> None:
-        """Close the specified file handle."""
-
-        self._rpc.call("fileClose", args)
-
-    def file_lock(self, args: FileLockArgs) -> None:
-        self._rpc.call("fileLock", args)
-
-    def file_read(self, args: FileReadArgs) -> FsFileReadResult:
-        result = self._rpc.call("fileRead", args)
-        return cast(FsFileReadResult, result)
-
-    def file_seek(self, args: FileSeekArgs) -> FsFileSeekResult:
-        result = self._rpc.call("fileSeek", args)
-        return cast(FsFileSeekResult, result)
-
-    def file_stat(self, args: FileStatArgs) -> FileHandleStat:
-        result = self._rpc.call("fileStat", args)
-        return cast(FileHandleStat, result)
-
-    def file_sync(self, args: FileSyncArgs) -> None:
-        self._rpc.call("fileSync", args)
-
-    def file_sync_data(self, args: FileSyncDataArgs) -> None:
-        self._rpc.call("fileSyncData", args)
-
-    def file_truncate(self, args: FileTruncateArgs) -> None:
-        self._rpc.call("fileTruncate", args)
-
-    def file_unlock(self, args: FileUnlockArgs) -> None:
-        self._rpc.call("fileUnlock", args)
-
-    def file_utime(self, args: FileUtimeArgs) -> None:
-        self._rpc.call("fileUtime", args)
-
-    def file_write(self, args: FileWriteArgs) -> FsFileWriteResult:
-        result = self._rpc.call("fileWrite", args)
-        return cast(FsFileWriteResult, result)
-
-    def walk(self, args: WalkArgs) -> int:
-        result = self._rpc.call("walk", args)
-        return result
-
-    def expand_glob(self, args: ExpandGlobArgs) -> int:
-        result = self._rpc.call("expandGlob", args)
-        return result
+        params = {"localPath": local_path, "sandboxPath": sandbox_path}
+        self._rpc.call("download", params)
 
 
 class AsyncSandboxFs:
-    def __init__(self, rpc: AsyncRpcClient):
+    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
+        self._client = client
         self._rpc = rpc
 
-    async def read_file(self, args: ReadFileArgs) -> None:
+    async def read_file(
+        self, path: str, options: Optional[ReadFileOptions] = None
+    ) -> bytes:
         """Reads the entire contents of a file as bytes."""
 
-        await self._rpc.call("readFile", args)
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    async def read_text_file(self, args: ReadTextFileArgs) -> str:
-        """Reads the entire contents of a file as an UTF-8 decoded string."""
+        result = await self._rpc.call("readFile", params)
 
-        result = await self._rpc.call("readTextFile", args)
         return result
 
-    async def write_file(self, args: WriteFileArgs) -> None:
+    async def write_file(
+        self, path: str, data: bytes, options: Optional[WriteFileOptions] = None
+    ) -> None:
         """Write bytes to file. Creates a new file if needed. Existing files will be overwritten."""
 
-        await self._rpc.call("writeFile", args)
+        params = {"path": path, "data": data}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    async def write_text_file(self, args: WriteTextFileArgs) -> None:
+        await self._rpc.call("writeFile", params)
+
+    async def read_text_file(
+        self, path: str, options: Optional[ReadFileOptions] = None
+    ) -> str:
+        """Reads the entire contents of a file as an UTF-8 decoded string."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("readTextFile", params)
+
+        return result
+
+    async def write_text_file(
+        self, path: str, data: str, options: Optional[WriteFileOptions] = None
+    ) -> None:
         """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
 
-        await self._rpc.call("writeTextFile", args)
+        params = {"path": path, "data": data}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    async def read_dir(self, args: ReadDirArgs) -> list[ReadDirEntry]:
+        await self._rpc.call("writeTextFile", params)
+
+    async def read_dir(self, path: str) -> list[DirEntry]:
         """Read the directory entries at the given path."""
 
-        result = await self._rpc.call("readDir", args)
-        return [cast(ReadDirEntry, i) for i in result]
+        params = {"path": path}
+        result = await self._rpc.call("readDir", params)
 
-    async def remove(self, args: RemoveArgs) -> None:
+        return result
+
+    async def remove(self, path: str, options: Optional[RemoveOptions] = None) -> None:
         """Remove the file or directory at the given path."""
 
-        await self._rpc.call("remove", args)
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    async def mkdir(self, args: MkdirArgs) -> None:
+        await self._rpc.call("remove", params)
+
+    async def mkdir(self, path: str, options: Optional[MkdirOptions] = None) -> None:
         """Create a new directory at the specified path."""
 
-        await self._rpc.call("mkdir", args)
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    async def rename(self, args: RenameArgs) -> None:
+        await self._rpc.call("mkdir", params)
+
+    async def rename(self, old_path: str, new_path: str) -> None:
         """Rename (move) a file or directory."""
 
-        await self._rpc.call("rename", args)
+        params = {"oldPath": old_path, "newPath": new_path}
+        await self._rpc.call("rename", params)
 
-    async def copy_file(self, args: CopyFileArgs) -> None:
-        """Copy a file from one location to another."""
+    async def stat(self, path: str) -> FileInfo:
+        """Return file information about a file or directory."""
 
-        await self._rpc.call("copyFile", args)
+        params = {"path": path}
+        result = await self._rpc.call("stat", params)
 
-    async def link(self, args: LinkArgs) -> None:
+        raw_result = convert_to_snake_case(result)
+        return cast(FileInfo, raw_result)
+
+    async def chmod(self, path: str, mode: int) -> None:
+        """Change the permission mode of a file or directory."""
+
+        params = {"path": path, "mode": mode}
+        await self._rpc.call("chmod", params)
+
+    async def chown(
+        self, path: str, uid: Optional[int] = None, gid: Optional[int] = None
+    ) -> None:
+        """Change the owner user ID and group ID of a file or directory."""
+
+        params = {"path": path, "uid": uid, "gid": gid}
+        await self._rpc.call("chown", params)
+
+    async def copy_file(self, from_path: str, to_path: str) -> None:
+        """Copy a file from a source path to a destination path."""
+
+        params = {"fromPath": from_path, "toPath": to_path}
+        await self._rpc.call("copyFile", params)
+
+    async def walk(
+        self, path: str, options: Optional[WalkOptions] = None
+    ) -> list[WalkEntry]:
+        """Recursively walk a directory tree."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("walk", params)
+
+        return result
+
+    async def expand_glob(
+        self, glob: str, options: Optional[ExpandGlobOptions] = None
+    ) -> list[str]:
+        """Expand a glob pattern to a list of paths."""
+
+        params = {"glob": glob}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("expandGlob", params)
+
+        return result
+
+    async def create(self, path: str) -> AsyncFsFile:
+        """Create a new empty file at the specified path."""
+
+        params = {"path": path}
+        result = await self._rpc.call("create", params)
+
+        return result
+
+    async def link(self, target: str, path: str) -> None:
         """Create a hard link pointing to an existing file."""
 
-        await self._rpc.call("link", args)
+        params = {"target": target, "path": path}
+        await self._rpc.call("link", params)
 
-    async def lstat(self, args: LstatArgs) -> FsLstatResult:
+    async def lstat(self, path: str) -> FileInfo:
         """Return file information about a file or directory symlink."""
 
-        result = await self._rpc.call("lstat", args)
-        return cast(FsLstatResult, result)
+        params = {"path": path}
+        result = await self._rpc.call("lstat", params)
 
-    async def make_temp_dir(self, args: MakeTempDirArgs) -> str:
+        raw_result = convert_to_snake_case(result)
+        return cast(FileInfo, raw_result)
+
+    async def make_temp_dir(self, options: Optional[MakeTempDirOptions] = None) -> str:
         """Create a new temporary directory."""
 
-        result = await self._rpc.call("makeTempDir", args)
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("makeTempDir", params)
+
         return result
 
-    async def make_temp_file(self, args: MakeTempFileArgs) -> str:
+    async def make_temp_file(
+        self, options: Optional[MakeTempFileOptions] = None
+    ) -> str:
         """Create a new temporary file."""
 
-        result = await self._rpc.call("makeTempFile", args)
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("makeTempFile", params)
+
         return result
 
-    async def read_link(self, args: ReadLinkArgs) -> str:
+    async def open(
+        self, path: str, options: Optional[FsOpenOptions] = None
+    ) -> AsyncFsFile:
+        """Open a file and return a file descriptor."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("open", params)
+
+        return result
+
+    async def read_link(self, path: str) -> str:
         """Read the target of a symbolic link."""
 
-        result = await self._rpc.call("readLink", args)
+        params = {"path": path}
+        result = await self._rpc.call("readLink", params)
+
         return result
 
-    async def real_path(self, args: RealPathArgs) -> str:
+    async def real_path(self, path: str) -> str:
         """Return the canonicalized absolute pathname."""
 
-        result = await self._rpc.call("realPath", args)
+        params = {"path": path}
+        result = await self._rpc.call("realPath", params)
+
         return result
 
-    async def symlink(self, args: SymlinkArgs) -> None:
+    async def symlink(
+        self, target: str, path: str, options: Optional[SymlinkOptions] = None
+    ) -> None:
         """Create a symbolic link."""
 
-        await self._rpc.call("symlink", args)
+        params = {"target": target, "path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    async def truncate(self, args: TruncateArgs) -> None:
+        await self._rpc.call("symlink", params)
+
+    async def truncate(self, name: str, length: Optional[int] = None) -> None:
         """Truncate or extend the specified file to reach a given size."""
 
-        await self._rpc.call("truncate", args)
+        params = {"name": name, "length": length}
+        await self._rpc.call("truncate", params)
 
-    async def umask(self, args: UmaskArgs) -> int:
+    async def umask(self, mask: Optional[int] = None) -> int:
         """Sets the process's file mode creation mask."""
 
-        result = await self._rpc.call("umask", args)
+        params = {"mask": mask}
+        result = await self._rpc.call("umask", params)
+
         return result
 
-    async def utime(self, args: UtimeArgs) -> None:
+    async def utime(self, path: str, atime: str, mtime: str) -> None:
         """Change the access and modification times of a file."""
 
-        await self._rpc.call("utime", args)
+        params = {"path": path, "atime": atime, "mtime": mtime}
+        await self._rpc.call("utime", params)
 
-    async def open(self, args: OpenArgs) -> FsOpenResult:
-        """Open a file and return a file handle id."""
+    async def upload(self, local_path: str, sandbox_path: str) -> None:
+        """Upload a file or directory to the sandbox."""
 
-        result = await self._rpc.call("open", args)
-        return cast(FsOpenResult, result)
+        params = {"localPath": local_path, "sandboxPath": sandbox_path}
+        await self._rpc.call("upload", params)
 
-    async def create(self, args: CreateArgs) -> FsCreateResult:
-        """Create a new file and return a file handle id."""
+    async def download(self, local_path: str, sandbox_path: str) -> None:
+        """Download a file or directory from the sandbox."""
 
-        result = await self._rpc.call("create", args)
-        return cast(FsCreateResult, result)
-
-    async def file_close(self, args: FileCloseArgs) -> None:
-        """Close the specified file handle."""
-
-        await self._rpc.call("fileClose", args)
-
-    async def file_lock(self, args: FileLockArgs) -> None:
-        await self._rpc.call("fileLock", args)
-
-    async def file_read(self, args: FileReadArgs) -> FsFileReadResult:
-        result = await self._rpc.call("fileRead", args)
-        return cast(FsFileReadResult, result)
-
-    async def file_seek(self, args: FileSeekArgs) -> FsFileSeekResult:
-        result = await self._rpc.call("fileSeek", args)
-        return cast(FsFileSeekResult, result)
-
-    async def file_stat(self, args: FileStatArgs) -> FileHandleStat:
-        result = await self._rpc.call("fileStat", args)
-        return cast(FileHandleStat, result)
-
-    async def file_sync(self, args: FileSyncArgs) -> None:
-        await self._rpc.call("fileSync", args)
-
-    async def file_sync_data(self, args: FileSyncDataArgs) -> None:
-        await self._rpc.call("fileSyncData", args)
-
-    async def file_truncate(self, args: FileTruncateArgs) -> None:
-        await self._rpc.call("fileTruncate", args)
-
-    async def file_unlock(self, args: FileUnlockArgs) -> None:
-        await self._rpc.call("fileUnlock", args)
-
-    async def file_utime(self, args: FileUtimeArgs) -> None:
-        await self._rpc.call("fileUtime", args)
-
-    async def file_write(self, args: FileWriteArgs) -> FsFileWriteResult:
-        result = await self._rpc.call("fileWrite", args)
-        return cast(FsFileWriteResult, result)
-
-    async def walk(self, args: WalkArgs) -> int:
-        result = await self._rpc.call("walk", args)
-        return result
-
-    async def expand_glob(self, args: ExpandGlobArgs) -> int:
-        result = await self._rpc.call("expandGlob", args)
-        return result
+        params = {"localPath": local_path, "sandboxPath": sandbox_path}
+        await self._rpc.call("download", params)
 
 
-class SandboxProcess:
-    def __init__(self, rpc: RpcClient):
+class SandboxDeno:
+    def __init__(self, client: ConsoleClient, rpc: RpcClient):
+        self._client = client
         self._rpc = rpc
 
-    def spawn(self, args: SpawnArgs) -> ProcessSpawnResult:
-        result = self._rpc.call("spawn", args)
-        return cast(ProcessSpawnResult, result)
+    def run(self, options: DenoRunOptions) -> DenoProcess:
+        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
 
-    def wait(self, args: WaitArgs) -> ProcessWaitResult:
-        result = self._rpc.call("processWait", args)
-        return cast(ProcessWaitResult, result)
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
 
-    def kill(self, args: KillArgs) -> None:
-        self._rpc.call("processKill", args)
+        result = self._rpc.call("spawnDeno", params)
 
-
-class AsyncSandboxProcess:
-    def __init__(self, rpc: AsyncRpcClient):
-        self._rpc = rpc
-
-    async def spawn(self, args: SpawnArgs) -> ProcessSpawnResult:
-        result = await self._rpc.call("spawn", args)
-        return cast(ProcessSpawnResult, result)
-
-    async def wait(self, args: WaitArgs) -> ProcessWaitResult:
-        result = await self._rpc.call("processWait", args)
-        return cast(ProcessWaitResult, result)
-
-    async def kill(self, args: KillArgs) -> None:
-        await self._rpc.call("processKill", args)
-
-
-class SandboxDenoCli:
-    def __init__(self, rpc: RpcClient):
-        self._rpc = rpc
-
-    def run(self, args: RunArgs) -> DenoRunResult:
-        result = self._rpc.call("spawnDeno", args)
-        return cast(DenoRunResult, result)
-
-    def deno_http_wait(self, args: DenoHttpWaitArgs) -> bool:
-        result = self._rpc.call("denoHttpWait", args)
         return result
 
-    def spawn_deno_repl(self, args: SpawnDenoReplArgs) -> DenoSpawnDenoReplResult:
-        result = self._rpc.call("spawnDenoRepl", args)
-        return cast(DenoSpawnDenoReplResult, result)
+    def eval(self, code: str) -> Any:
+        result = self._client._sandbox_deno_eval(code)
 
-    def deno_repl_close(self, args: DenoReplCloseArgs) -> None:
-        self._rpc.call("denoReplClose", args)
-
-    def deno_repl_eval(self, args: DenoReplEvalArgs) -> Any:
-        result = self._rpc.call("denoReplEval", args)
         return result
 
-    def deno_repl_call(self, args: DenoReplCallArgs) -> Any:
-        result = self._rpc.call("denoReplCall", args)
+    def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("spawnDenoRepl", params)
+
         return result
 
+    def deploy(self, app: str, options: Optional[DeployOptions] = None) -> None:
+        self._client._sandbox_deno_deploy(app, options)
 
-class AsyncSandboxDenoCli:
-    def __init__(self, rpc: AsyncRpcClient):
+
+class AsyncSandboxDeno:
+    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
+        self._client = client
         self._rpc = rpc
 
-    async def run(self, args: RunArgs) -> DenoRunResult:
-        result = await self._rpc.call("spawnDeno", args)
-        return cast(DenoRunResult, result)
+    async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
+        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
 
-    async def deno_http_wait(self, args: DenoHttpWaitArgs) -> bool:
-        result = await self._rpc.call("denoHttpWait", args)
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("spawnDeno", params)
+
         return result
 
-    async def spawn_deno_repl(self, args: SpawnDenoReplArgs) -> DenoSpawnDenoReplResult:
-        result = await self._rpc.call("spawnDenoRepl", args)
-        return cast(DenoSpawnDenoReplResult, result)
+    async def eval(self, code: str) -> Any:
+        result = await self._client._sandbox_deno_eval(code)
 
-    async def deno_repl_close(self, args: DenoReplCloseArgs) -> None:
-        await self._rpc.call("denoReplClose", args)
-
-    async def deno_repl_eval(self, args: DenoReplEvalArgs) -> Any:
-        result = await self._rpc.call("denoReplEval", args)
         return result
 
-    async def deno_repl_call(self, args: DenoReplCallArgs) -> Any:
-        result = await self._rpc.call("denoReplCall", args)
+    async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
+        params = {}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("spawnDenoRepl", params)
+
         return result
 
-
-class SandboxNet:
-    def __init__(self, rpc: RpcClient):
-        self._rpc = rpc
-
-    def fetch(self, args: FetchArgs) -> NetFetchResult:
-        result = self._rpc.call("fetch", args)
-        return cast(NetFetchResult, result)
-
-    def expose_http(self, args: ExposeHttpArgs) -> None:
-        self._rpc.call("exposeHttp", args)
-
-
-class AsyncSandboxNet:
-    def __init__(self, rpc: AsyncRpcClient):
-        self._rpc = rpc
-
-    async def fetch(self, args: FetchArgs) -> NetFetchResult:
-        result = await self._rpc.call("fetch", args)
-        return cast(NetFetchResult, result)
-
-    async def expose_http(self, args: ExposeHttpArgs) -> None:
-        await self._rpc.call("exposeHttp", args)
-
-
-class SandboxVSCode:
-    def __init__(self, rpc: RpcClient):
-        self._rpc = rpc
-
-    def connect(self, args: ConnectArgs) -> VscodeConnectResult:
-        result = self._rpc.call("connect", args)
-        return cast(VscodeConnectResult, result)
-
-
-class AsyncSandboxVSCode:
-    def __init__(self, rpc: AsyncRpcClient):
-        self._rpc = rpc
-
-    async def connect(self, args: ConnectArgs) -> VscodeConnectResult:
-        result = await self._rpc.call("connect", args)
-        return cast(VscodeConnectResult, result)
+    async def deploy(self, app: str, options: Optional[DeployOptions] = None) -> None:
+        await self._client._sandbox_deno_deploy(app, options)
 
 
 class SandboxEnv:
-    def __init__(self, rpc: RpcClient):
+    def __init__(self, client: ConsoleClient, rpc: RpcClient):
+        self._client = client
         self._rpc = rpc
 
-    def get(self, args: GetArgs) -> str:
-        result = self._rpc.call("envGet", args)
+    def get(self, key: str) -> str:
+        """Get the value of an environment variable."""
+
+        params = {"key": key}
+        result = self._rpc.call("envGet", params)
+
         return result
 
-    def set(self, args: SetArgs) -> None:
-        self._rpc.call("envSet", args)
+    def set(self, key: str, value: str) -> None:
+        """Set the value of an environment variable."""
 
-    def to_object(self, args: None) -> dict[str, str]:
-        result = self._rpc.call("envToObject", {})
+        params = {"key": key, "value": value}
+        self._rpc.call("envSet", params)
+
+    def to_object(self) -> dict[str, str]:
+        """Get all environment variables."""
+
+        params = {}
+        result = self._rpc.call("envToObject", params)
+
         return result
 
-    def delete(self, args: DeleteArgs) -> None:
-        self._rpc.call("envDelete", args)
+    def delete(self, key: str) -> None:
+        """Delete an environment variable."""
+
+        params = {"key": key}
+        self._rpc.call("envDelete", params)
 
 
 class AsyncSandboxEnv:
-    def __init__(self, rpc: AsyncRpcClient):
+    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
+        self._client = client
         self._rpc = rpc
 
-    async def get(self, args: GetArgs) -> str:
-        result = await self._rpc.call("envGet", args)
+    async def get(self, key: str) -> str:
+        """Get the value of an environment variable."""
+
+        params = {"key": key}
+        result = await self._rpc.call("envGet", params)
+
         return result
 
-    async def set(self, args: SetArgs) -> None:
-        await self._rpc.call("envSet", args)
+    async def set(self, key: str, value: str) -> None:
+        """Set the value of an environment variable."""
 
-    async def to_object(self, args: None) -> dict[str, str]:
-        result = await self._rpc.call("envToObject", {})
+        params = {"key": key, "value": value}
+        await self._rpc.call("envSet", params)
+
+    async def to_object(self) -> dict[str, str]:
+        """Get all environment variables."""
+
+        params = {}
+        result = await self._rpc.call("envToObject", params)
+
         return result
 
-    async def delete(self, args: DeleteArgs) -> None:
-        await self._rpc.call("envDelete", args)
+    async def delete(self, key: str) -> None:
+        """Delete an environment variable."""
+
+        params = {"key": key}
+        await self._rpc.call("envDelete", params)
