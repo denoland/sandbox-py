@@ -69,7 +69,7 @@ class AsyncRpcClient:
         response = cast(RpcResponse[Any], raw_response)
 
         if response.get("error") is not None:
-            if response["error"].get("code") == -32602:
+            if response["error"].get("message") == "Method not found":
                 raise UnknownRpcMethod("RPC method not found")
 
             if response["error"].get("data") is not None:

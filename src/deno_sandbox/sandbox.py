@@ -74,6 +74,18 @@ class AppConfig(TypedDict):
     secrets: NotRequired[dict[str, SecretConfig] | None]
 
 
+class ProcessSpawnResult(TypedDict):
+    pid: int
+    stdout_stream_id: int
+    stderr_stream_id: int
+
+
+class ProcessWaitResult(TypedDict):
+    success: bool
+    code: int
+    signal: AbortSignal | None
+
+
 class SandboxApi:
     def __init__(self, client: ConsoleClient, bridge: AsyncBridge):
         self._bridge = bridge
@@ -270,7 +282,6 @@ class AsyncChildProcess:
     async def status(self) -> ChildProcessStatus:
         raw = await self._wait_task
         result = cast(ProcessWaitResult, raw)
-        self.returncode = result["code"]
         return ChildProcessStatus(
             success=result["success"], code=result["code"], signal=result["signal"]
         )
@@ -310,11 +321,9 @@ class SyncStreamReader:
 class ChildProcess:
     def __init__(
         self,
-        res: ProcessSpawnResult,
         rpc: RpcClient,
         async_proc: AsyncChildProcess,
     ):
-        self.pid = res["pid"]
         self._rpc = rpc
 
         self._async_proc = async_proc
@@ -322,10 +331,13 @@ class ChildProcess:
         self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
         self.returncode: int | None = None
 
-    def wait(self) -> int:
-        result = self._rpc._bridge.run(self._async_proc.wait())
-        self.returncode = self._async_proc.returncode
-        return result
+    @property
+    def pid(self) -> int:
+        return self._async_proc.pid
+
+    @property
+    def status(self) -> ChildProcessStatus:
+        return self._rpc._bridge.run(self._async_proc.status)
 
 
 class VsCodeOptions(TypedDict):
@@ -373,7 +385,6 @@ class AsyncSandbox:
     async def spawn(
         self, command: str, options: Optional[SpawnOptions] = None
     ) -> AsyncChildProcess:
-        print("Spawning command:", command)
         params = {
             "command": command,
             "stdout": "inherit",
@@ -390,8 +401,7 @@ class AsyncSandbox:
             stderr_inherit=params["stderr"] == "inherit",
         )
 
-        # FIXME type this result
-        result = await self._rpc.call("spawn", params)
+        result: ProcessSpawnResult = await self._rpc.call("spawn", params)
         return await AsyncChildProcess.create(result, self._rpc, opts)
 
     # FIXME

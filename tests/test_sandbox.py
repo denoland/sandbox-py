@@ -79,8 +79,9 @@ async def test_spawn_async(async_shared_sandbox) -> None:
             "stderr": "piped",
         },
     )
-    code = await p.wait()
-    assert code == 0
+
+    status = await p.status
+    assert status["code"] == 0
 
     stdout = await p.stdout.read(-1)
     stderr = await p.stderr.read(-1)
@@ -99,8 +100,9 @@ async def test_spawn_sync(shared_sandbox) -> None:
             "stderr": "piped",
         },
     )
-    code = p.wait()
-    assert code == 0
+
+    status = p.status
+    assert status["code"] == 0
 
     stdout = p.stdout.read(-1)
     stderr = p.stderr.read(-1)
