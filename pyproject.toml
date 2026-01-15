@@ -1,6 +1,6 @@
 [project]
 name = "deno-sandbox"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deno Sandbox Python SDK"
 readme = "README.md"
 authors = [{ name = "The Deno Team", email = "support@deno.com" }]
