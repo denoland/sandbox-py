@@ -1,16 +1,19 @@
-from pprint import pprint
-import random
 import pytest
+import uuid
 
 from deno_sandbox import AsyncDenoDeploy, DenoDeploy
 from deno_sandbox.api_types_generated import Volume
+
+
+def gen_volume_name() -> str:
+    return f"test-volume-{uuid.uuid4().hex[:8]}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_volume_create_async():
     sdk = AsyncDenoDeploy()
 
-    slug = f"my-volume-{random.randint(1, 100)}"
+    slug = gen_volume_name()
     volume = await sdk.volumes.create(
         {"capacity": "1GB", "region": "ord", "slug": slug}
     )
@@ -34,7 +37,7 @@ async def test_volume_create_async():
 async def test_volume_create_sync():
     sdk = DenoDeploy()
 
-    slug = f"my-volume-{random.randint(1, 100)}"
+    slug = gen_volume_name()
     volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
 
     assert volume is not None
@@ -57,7 +60,7 @@ async def test_volume_create_sync():
 async def test_volume_get_async():
     sdk = AsyncDenoDeploy()
 
-    slug = f"my-volume-{random.randint(1, 100)}"
+    slug = gen_volume_name()
     volume = await sdk.volumes.create(
         {"capacity": "1GB", "region": "ord", "slug": slug}
     )
@@ -70,7 +73,7 @@ async def test_volume_get_async():
 async def test_volume_get_sync():
     sdk = DenoDeploy()
 
-    slug = f"my-volume-{random.randint(1, 100)}"
+    slug = gen_volume_name()
     volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
 
     volume2 = sdk.volumes.get(volume["id"])
@@ -81,15 +84,26 @@ async def test_volume_get_sync():
 async def test_volume_list_async():
     sdk = AsyncDenoDeploy()
 
-    slug = f"my-volume-{random.randint(1, 100)}"
+    slug = gen_volume_name()
     volume = await sdk.volumes.create(
         {"capacity": "1GB", "region": "ord", "slug": slug}
     )
 
     volumes = await sdk.volumes.list()
 
-    pprint(volumes)
+    assert type(volumes.has_more) is bool
+    assert volumes.next_cursor is None or type(volumes.next_cursor) is str
+    assert any(v["id"] == volume["id"] for v in volumes.items)
 
-    assert type(volumes["has_more"]) is bool
-    assert "next_cursor" in volumes
-    assert any(v["id"] == volume["id"] for v in volumes["items"])
+
+async def test_volume_list_sync():
+    sdk = DenoDeploy()
+
+    slug = gen_volume_name()
+    volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
+
+    volumes = sdk.volumes.list()
+
+    assert type(volumes.has_more) is bool
+    assert volumes.next_cursor is None or type(volumes.next_cursor) is str
+    assert any(v["id"] == volume["id"] for v in volumes.items)

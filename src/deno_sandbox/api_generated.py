@@ -5,7 +5,6 @@ from typing_extensions import Optional
 from deno_sandbox.api_types_generated import (
     App,
     AppListOptions,
-    PaginatedList,
     AppInit,
     AppUpdate,
     Timeline,
@@ -21,6 +20,7 @@ from deno_sandbox.api_types_generated import (
     DirEntry,
     RemoveOptions,
     MkdirOptions,
+    FileInfo,
     WalkOptions,
     WalkEntry,
     ExpandGlobOptions,
@@ -35,9 +35,13 @@ from deno_sandbox.api_types_generated import (
 
 from deno_sandbox.rpc import RpcClient, AsyncRpcClient
 from deno_sandbox.utils import convert_to_camel_case, convert_to_snake_case
-from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
+from deno_sandbox.console import (
+    AsyncConsoleClient,
+    ConsoleClient,
+    AsyncPaginatedList,
+    PaginatedList,
+)
 from deno_sandbox.wrappers import (
-    FileInfo,
     FsFile,
     AsyncFsFile,
     DenoProcess,
@@ -64,10 +68,9 @@ class Apps:
 
         result = self._client._apps_list(options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[App], raw_result)
+        return result
 
-    def create(self, options: AppInit) -> App:
+    def create(self, options: Optional[AppInit] = None) -> App:
         """Create a new app."""
 
         result = self._client._apps_create(options)
@@ -103,15 +106,14 @@ class AsyncApps:
 
     async def list(
         self, options: Optional[AppListOptions] = None
-    ) -> PaginatedList[App]:
+    ) -> AsyncPaginatedList[App]:
         """List apps of an org."""
 
         result = await self._client._apps_list(options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[App], raw_result)
+        return result
 
-    async def create(self, options: AppInit) -> App:
+    async def create(self, options: Optional[AppInit] = None) -> App:
         """Create a new app."""
 
         result = await self._client._apps_create(options)
@@ -152,8 +154,7 @@ class Revisions:
 
         result = self._client._revisions_list(app, options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[RevisionWithoutTimelines], raw_result)
+        return result
 
 
 class AsyncRevisions:
@@ -170,13 +171,12 @@ class AsyncRevisions:
 
     async def list(
         self, app: str, options: Optional[RevisionListOptions] = None
-    ) -> PaginatedList[RevisionWithoutTimelines]:
+    ) -> AsyncPaginatedList[RevisionWithoutTimelines]:
         """List revisions for a specific app."""
 
         result = await self._client._revisions_list(app, options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[RevisionWithoutTimelines], raw_result)
+        return result
 
 
 class Timelines:
@@ -190,8 +190,7 @@ class Timelines:
 
         result = self._client._timelines_list(app, options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[Timeline], raw_result)
+        return result
 
 
 class AsyncTimelines:
@@ -200,13 +199,12 @@ class AsyncTimelines:
 
     async def list(
         self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> PaginatedList[Timeline]:
+    ) -> AsyncPaginatedList[Timeline]:
         """List timelines for a specific app."""
 
         result = await self._client._timelines_list(app, options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[Timeline], raw_result)
+        return result
 
 
 class Volumes:
@@ -234,8 +232,7 @@ class Volumes:
     ) -> PaginatedList[Volume]:
         result = self._client._volumes_list(options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[Volume], raw_result)
+        return result
 
     def delete(self, id_or_slug: str) -> None:
         """Delete volume by ID or slug."""
@@ -265,11 +262,10 @@ class AsyncVolumes:
 
     async def list(
         self, options: Optional[VolumeListOptions] = None
-    ) -> PaginatedList[Volume]:
+    ) -> AsyncPaginatedList[Volume]:
         result = await self._client._volumes_list(options)
 
-        raw_result = convert_to_snake_case(result)
-        return cast(PaginatedList[Volume], raw_result)
+        return result
 
     async def delete(self, id_or_slug: str) -> None:
         """Delete volume by ID or slug."""

@@ -30,17 +30,6 @@ class AppListOptions(TypedDict):
     """Limit the number of items to return."""
 
 
-class PaginatedList[T](TypedDict):
-    items: list[T]
-    """The items in the current page of the paginated list."""
-
-    has_more: bool
-    """Whether there are more items to fetch."""
-
-    next_cursor: NotRequired[str | None]
-    """The cursor for pagination."""
-
-
 class AppInit(TypedDict):
     slug: NotRequired[str | None]
     """Human readable identifier for the app."""

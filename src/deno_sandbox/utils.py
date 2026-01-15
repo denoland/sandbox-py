@@ -26,3 +26,16 @@ def convert_to_snake_case(data):
         return [convert_to_snake_case(i) for i in data]
     else:
         return data
+
+
+def parse_link_header(header: str) -> dict[str, str]:
+    links = {}
+    parts = header.split(",")
+    for part in parts:
+        section = part.split(";")
+        if len(section) < 2:
+            continue
+        url = section[0].strip()[1:-1]
+        name = section[1].strip().split("=")[1][1:-1]
+        links[name] = url
+    return links
