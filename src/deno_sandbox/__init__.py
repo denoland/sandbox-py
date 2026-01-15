@@ -3,9 +3,11 @@ from deno_sandbox.api_generated import (
     Apps,
     AsyncApps,
     AsyncRevisions,
+    AsyncSnapshots,
     AsyncTimelines,
     AsyncVolumes,
     Revisions,
+    Snapshots,
     Timelines,
     Volumes,
 )
@@ -30,6 +32,7 @@ class DenoDeploy:
         self.revisions = Revisions(client)
         self.timelines = Timelines(client)
         self.sandbox = SandboxApi(client, bridge)
+        self.snapshots = Snapshots(client)
         self.volumes = Volumes(client)
 
 
@@ -42,4 +45,5 @@ class AsyncDenoDeploy:
         self.revisions = AsyncRevisions(client)
         self.timelines = AsyncTimelines(client)
         self.sandbox = AsyncSandboxApi(client)
+        self.snapshots = AsyncSnapshots(client)
         self.volumes = AsyncVolumes(client)

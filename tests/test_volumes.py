@@ -57,6 +57,32 @@ async def test_volume_create_sync():
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_volume_delete_async():
+    sdk = AsyncDenoDeploy()
+
+    slug = gen_volume_name()
+    volume = await sdk.volumes.create(
+        {"capacity": "1GB", "region": "ord", "slug": slug}
+    )
+
+    await sdk.volumes.delete(volume["id"])
+    result = await sdk.volumes.get(volume["id"])
+    assert result is None
+
+
+async def test_volume_delete_sync():
+    sdk = DenoDeploy()
+
+    slug = gen_volume_name()
+    volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
+
+    sdk.volumes.delete(volume["id"])
+
+    result = sdk.volumes.get(volume["id"])
+    assert result is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_volume_get_async():
     sdk = AsyncDenoDeploy()
 

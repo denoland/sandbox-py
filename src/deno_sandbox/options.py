@@ -30,7 +30,7 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
         raise MissingApiToken({"message": "DENO_DEPLOY_TOKEN is not set"})
 
     scheme = sandbox_url.scheme.replace("http", "ws")
-    sandbox_ws_url = URL(f"{scheme}://{sandbox_url.netloc}")
+    sandbox_ws_url = URL(f"{scheme}://{sandbox_url.netloc.decode()}")
 
     console_url = URL(
         os.environ.get("DENO_DEPLOY_ENDPOINT", "https://console.deno.com")

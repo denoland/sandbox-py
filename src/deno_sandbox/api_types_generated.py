@@ -1,7 +1,7 @@
 # ATTENTION: This file is auto-generated. Do not edit it manually.
 
 
-from typing_extensions import TypedDict, NotRequired, Literal
+from typing_extensions import TypedDict, NotRequired, Literal, Any
 from re import Pattern
 from deno_sandbox.wrappers import AbortSignal
 
@@ -134,7 +134,7 @@ class VolumeInit(TypedDict):
     """The capacity of the volume in bytes. When passing a string you can use these units too: GB, MB, kB, GiB, MiB, KiB"""
 
 
-class VolumeSnapshot(TypedDict):
+class BaseSnapshot(TypedDict):
     id: str
     """The unique identifier for the snapshot."""
 
@@ -181,7 +181,7 @@ class Volume(TypedDict):
     is_bootable: bool
     """Whether the volume is bootable."""
 
-    base_snapshot: VolumeSnapshot
+    base_snapshot: BaseSnapshot
     """The snapshot the volume was created from."""
 
 
@@ -194,6 +194,56 @@ class VolumeListOptions(TypedDict):
 
     search: NotRequired[str | None]
     """The search query to filter volumes by."""
+
+
+class SnapshotInit(TypedDict):
+    slug: str
+    """Human readable identifier for the snapshot."""
+
+
+class Snapshot(TypedDict):
+    id: str
+    """The unique identifier for the snapshot."""
+
+    slug: str
+    """The human readable identifier for the snapshot."""
+
+    region: str
+    """The region the snapshot is located in."""
+
+    allocated_size: int
+    """
+  The number of bytes currently allocated specifically for the snapshot.
+  
+  Snapshots created from other snapshots only store data that is different
+  from their base snapshot, so this size may be smaller than the actual size
+  of the file system on the snapshot.
+  This is not the total size of the snapshot.
+  """
+
+    flattened_size: int
+    """
+  The total size of the file system on the snapshot, in bytes. This is the size the snapshot would take up if it were fully "flattened" (i.e., if all data from any snapshots it was created from were fully stored in this snapshot).
+  
+  Snapshots created from other snapshots only store data that is different from their base snapshot, so this size may be larger than the amount of data actually allocated for the snapshot.
+  """
+
+    is_bootable: bool
+    """Whether the snapshot is bootable."""
+
+    base_snapshot: BaseSnapshot
+    """The snapshot the volume was created from."""
+
+
+class SnapshotListOptions(TypedDict):
+    cursor: NotRequired[str | None]
+    """The cursor for pagination."""
+
+    limit: NotRequired[int | None]
+    """Limit the number of snapshots to return."""
+
+    search: NotRequired[str | None]
+    """The search query to filter snapshots by."""
 
 
 class SecretConfig(TypedDict):
@@ -234,6 +284,18 @@ class SandboxCreateOptions(TypedDict):
 
     labels: NotRequired[dict[str, str] | None]
     """Labels to set on the sandbox. Up to 5 labels can be specified. Each label key must be at most 64 bytes, and each label value must be at most 128 bytes."""
+
+    root: NotRequired[str | None]
+    """
+  A volume or snapshot to use as the root filesystem of the sandbox. This is
+  optional; if not specified, the default base image will be used.
+  
+  The volume or snapshot must be bootable.
+  
+  Volumes will be mounted read-write (so writes are persisted), while
+  snapshots will be mounted read-only, so any writes in the sandbox will not
+  be persisted.
+  """
 
     volumes: NotRequired[dict[str, str] | None]
     """

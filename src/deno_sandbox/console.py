@@ -250,6 +250,9 @@ class AsyncConsoleClient:
             return None
         return cast(Volume, result)
 
+    async def _volumes_delete(self, id_or_slug: str) -> None:
+        await self.delete(f"/api/v2/volumes/{id_or_slug}")
+
     async def _volumes_list(
         self, options: Optional[VolumeListOptions] = None
     ) -> AsyncPaginatedList[Volume]:
@@ -327,6 +330,9 @@ class ConsoleClient:
 
     def _volumes_get(self, id_or_slug: str) -> Volume | None:
         return self._bridge.run(self._async._volumes_get(id_or_slug))
+
+    def _volumes_delete(self, id_or_slug: str) -> None:
+        self._bridge.run(self._async._volumes_delete(id_or_slug))
 
     def _volumes_list(
         self, options: Optional[VolumeListOptions] = None

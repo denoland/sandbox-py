@@ -1,11 +1,11 @@
-from pydantic_core import Url
 from websockets import ConnectionClosed, connect
+from httpx import URL
 
 from deno_sandbox.errors import AuthenticationError
 
 
 class WebSocketTransport:
-    async def connect(self, url: Url, headers: dict[str, str]) -> None:
+    async def connect(self, url: URL, headers: dict[str, str]) -> None:
         try:
             self._ws = await connect(str(url), additional_headers=headers)
         except Exception as e:

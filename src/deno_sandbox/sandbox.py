@@ -151,11 +151,14 @@ class AsyncSandboxApi:
         if options is not None:
             for k, v in options.items():
                 if v is not None:
-                    app_config[k] = v
+                    if k == "root":
+                        app_config["root"] = {"volume": v}
+                    else:
+                        app_config[k] = v
 
         json_config = json.dumps(app_config, separators=(",", ":")).encode("utf-8")
 
-        url = f"{self._client._options['sandbox_ws_url']}api/v3/sandboxes/create"
+        url = self._client._options["sandbox_ws_url"].join("/api/v3/sandboxes/create")
         token = self._client._options["token"]
 
         transport = WebSocketTransport()
@@ -179,7 +182,9 @@ class AsyncSandboxApi:
     async def connect(self, sandbox_id: str) -> AsyncIterator[AsyncSandbox]:
         """Connects to an existing sandbox instance."""
 
-        url = f"{self._client._options['sandbox_ws_url']}api/v3/sandbox/{sandbox_id}/connect"
+        url = self._client._options["sandbox_ws_url"].join(
+            f"/api/v3/sandbox/{sandbox_id}/connect"
+        )
         token = self._client._options["token"]
         transport = WebSocketTransport()
         await transport.connect(
@@ -199,41 +204,6 @@ class AsyncSandboxApi:
         self, options: Optional[SandboxListOptions] = None
     ) -> list[SandboxMeta]:
         return await self._client.sandboxes_list(options)
-
-
-# class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
-#     async def spawn(self, args: SpawnArgs) -> AsyncChildProcess:
-#         options: RemoteProcessOptions = {
-#             "stdout_inherit": args.get("stdout", "inherit") == "inherit",
-#             "stderr_inherit": args.get("stderr", "inherit") == "inherit",
-#         }
-
-#         if args.get("stdout") is None:
-#             args["stdout"] = "piped"
-#         if args.get("stderr") is None:
-#             args["stderr"] = "piped"
-
-#         result: ProcessSpawnResult = await super().spawn(args)
-#         return await AsyncChildProcess.create(result, self._rpc, options)
-
-
-# class SandboxProcess(GeneratedSandboxProcess):
-#     def spawn(self, args: SpawnArgs) -> ChildProcess:
-#         options: RemoteProcessOptions = {
-#             "stdout_inherit": args.get("stdout", "inherit") == "inherit",
-#             "stderr_inherit": args.get("stderr", "inherit") == "inherit",
-#         }
-
-#         if args.get("stdout") is None:
-#             args["stdout"] = "piped"
-#         if args.get("stderr") is None:
-#             args["stderr"] = "piped"
-
-#         result: ProcessSpawnResult = super().spawn(args)
-#         async_proc = self._rpc._bridge.run(
-#             AsyncChildProcess.create(result, self._rpc._async_client, options)
-#         )
-#         return ChildProcess(result, self._rpc, async_proc)
 
 
 class RemoteProcessOptions(TypedDict):
@@ -401,6 +371,11 @@ class AsyncSandbox:
             stderr_inherit=params["stderr"] == "inherit",
         )
 
+        if params["stdout"] == "inherit":
+            params["stdout"] = "piped"
+        if params["stderr"] == "inherit":
+            params["stderr"] = "piped"
+
         result: ProcessSpawnResult = await self._rpc.call("spawn", params)
         return await AsyncChildProcess.create(result, self._rpc, opts)
 
@@ -412,7 +387,7 @@ class AsyncSandbox:
         await self._rpc.close()
 
     async def kill(self) -> None:
-        await self._rpc.call("abort", {"abortId": self.id})
+        pass
 
     async def extend_timeout(self, additional_s: int) -> None:
         pass
@@ -471,11 +446,11 @@ class Sandbox:
     def extend_timeout(self, additional_s: int) -> None:
         self._client._bridge.run(self._async.extend_timeout(additional_s))
 
-    def expose_http(self, portOrPid: int) -> str:
-        self._client._bridge.run(self._async.expose_http(portOrPid))
+    def expose_http(self, port_or_pid: int) -> str:
+        self._client._bridge.run(self._async.expose_http(port_or_pid))
 
-    def expose_ssh(self, portOrPid: int) -> str:
-        self._client._bridge.run(self._async.expose_ssh(portOrPid))
+    def expose_ssh(self, port_or_pid: int) -> str:
+        self._client._bridge.run(self._async.expose_ssh(port_or_pid))
 
     def expose_vscode(
         self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None

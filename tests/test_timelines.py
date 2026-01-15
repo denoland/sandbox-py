@@ -10,8 +10,6 @@ async def test_timeline_list_async():
     app = await sdk.apps.create()
     timelines = await sdk.timelines.list(app=app["id"])
 
-    print(timelines.items)
-
     assert type(timelines.has_more) is bool
     assert timelines.next_cursor is None or type(timelines.next_cursor) is str
     assert isinstance(timelines.items, list)

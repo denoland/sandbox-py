@@ -15,6 +15,9 @@ from deno_sandbox.api_types_generated import (
     VolumeInit,
     Volume,
     VolumeListOptions,
+    SnapshotInit,
+    Snapshot,
+    SnapshotListOptions,
     ReadFileOptions,
     WriteFileOptions,
     DirEntry,
@@ -239,6 +242,11 @@ class Volumes:
 
         self._client._volumes_delete(id_or_slug)
 
+    def snapshot(self, id_or_slug: str, init: SnapshotInit) -> None:
+        """Create a snapshot of a volume by ID or slug."""
+
+        self._client._volumes_snapshot(id_or_slug, init)
+
 
 class AsyncVolumes:
     def __init__(self, client: AsyncConsoleClient):
@@ -271,6 +279,65 @@ class AsyncVolumes:
         """Delete volume by ID or slug."""
 
         await self._client._volumes_delete(id_or_slug)
+
+    async def snapshot(self, id_or_slug: str, init: SnapshotInit) -> None:
+        """Create a snapshot of a volume by ID or slug."""
+
+        await self._client._volumes_snapshot(id_or_slug, init)
+
+
+class Snapshots:
+    def __init__(self, client: ConsoleClient):
+        self._client = client
+
+    def get(self, id_or_slug: str) -> Snapshot:
+        """Get a snapshot by ID or slug."""
+
+        result = self._client._snapshots_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Snapshot, raw_result)
+
+    def list(
+        self, options: Optional[SnapshotListOptions] = None
+    ) -> PaginatedList[Snapshot]:
+        """List snapshots."""
+
+        result = self._client._snapshots_list(options)
+
+        return result
+
+    def delete(self, id_or_slug: str) -> None:
+        """Delete snapshot by ID or slug."""
+
+        self._client._snapshots_delete(id_or_slug)
+
+
+class AsyncSnapshots:
+    def __init__(self, client: AsyncConsoleClient):
+        self._client = client
+
+    async def get(self, id_or_slug: str) -> Snapshot:
+        """Get a snapshot by ID or slug."""
+
+        result = await self._client._snapshots_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(Snapshot, raw_result)
+
+    async def list(
+        self, options: Optional[SnapshotListOptions] = None
+    ) -> AsyncPaginatedList[Snapshot]:
+        """List snapshots."""
+
+        result = await self._client._snapshots_list(options)
+
+        return result
+
+    async def delete(self, id_or_slug: str) -> None:
+        """Delete snapshot by ID or slug."""
+
+        await self._client._snapshots_delete(id_or_slug)
 
 
 class SandboxFs:
