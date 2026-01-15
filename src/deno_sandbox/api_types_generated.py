@@ -1,7 +1,7 @@
 # ATTENTION: This file is auto-generated. Do not edit it manually.
 
 
-from typing_extensions import TypedDict, NotRequired, Literal, Any
+from typing_extensions import TypedDict, NotRequired, Literal
 from re import Pattern
 from deno_sandbox.wrappers import AbortSignal
 
