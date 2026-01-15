@@ -1,46 +1,49 @@
-from dataclasses import dataclass
 import os
 
-from urllib.parse import urlparse
+from typing import NotRequired, Optional, TypedDict
 
-from pydantic_core import Url
+from httpx import URL
 
-
-@dataclass(frozen=True)
-class Options:
-    token: str | Url | None = None
-    regions: list[str] | None = None
+from deno_sandbox.errors import MissingApiToken
 
 
-@dataclass
-class InternalOptions:
-    sandbox_ws_url: Url
-    console_url: Url
-    token: Url
+class Options(TypedDict):
+    token: NotRequired[str | None]
+    regions: NotRequired[list[str] | None]
+
+
+class InternalOptions(TypedDict):
+    sandbox_ws_url: URL
+    console_url: URL
+    token: str
     regions: list[str]
 
 
-def get_internal_options(options: Options) -> InternalOptions:
-    options = options or Options()
-
-    url = urlparse(
-        os.environ.get("DENO_DEPLOY_URL", "https://ams.sandbox-api.deno.net")
+def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
+    sandbox_url = URL(
+        os.environ.get("DENO_SANDBOX_ENDPOINT", "https://ams.sandbox-api.deno.net")
     )
 
-    token = options.token or os.environ.get("DENO_DEPLOY_TOKEN", "")
+    token = options and options["token"] or os.environ.get("DENO_DEPLOY_TOKEN", None)
 
-    scheme = url.scheme.replace("http", "ws")
-    sandbox_ws_url = Url(f"{scheme}://{url.netloc}/api/v2/sandbox/ws?format=json")
+    if token is None:
+        raise MissingApiToken({"message": "DENO_DEPLOY_TOKEN is not set"})
 
-    console_url = os.environ.get("DENO_DEPLOY_CONSOLE_URL", "https://console.deno.com")
-    parsed_console_url = urlparse(console_url)
+    scheme = sandbox_url.scheme.replace("http", "ws")
+    sandbox_ws_url = URL(f"{scheme}://{sandbox_url.netloc.decode()}")
 
-    regions = options.regions or os.environ.get(
-        "DENO_AVAILABLE_REGIONS", "ams1,ord"
-    ).split(",")
+    console_url = URL(
+        os.environ.get("DENO_DEPLOY_ENDPOINT", "https://console.deno.com")
+    )
+
+    regions = (
+        options
+        and options["regions"]
+        or os.environ.get("DENO_AVAILABLE_REGIONS", "ams1,ord").split(",")
+    )
 
     return InternalOptions(
-        console_url=parsed_console_url,
+        console_url=console_url,
         sandbox_ws_url=sandbox_ws_url,
         token=token,
         regions=regions,

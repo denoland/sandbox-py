@@ -1,29 +1,20 @@
-from abc import ABC, abstractmethod
-
-from pydantic_core import Url
 from websockets import ConnectionClosed, connect
+from httpx import URL
+
+from deno_sandbox.errors import AuthenticationError
 
 
-class Transport(ABC):
-    @abstractmethod
-    async def send(self, data: dict[str, any]) -> None: ...
+class WebSocketTransport:
+    async def connect(self, url: URL, headers: dict[str, str]) -> None:
+        try:
+            self._ws = await connect(str(url), additional_headers=headers)
+        except Exception as e:
+            if "HTTP 401" in str(e):
+                raise AuthenticationError(
+                    "Authentication failed, invalid API token"
+                ) from e
 
-    @abstractmethod
-    async def receive(self) -> dict[str, any]: ...
-
-    @abstractmethod
-    async def connect(self, url: Url, headers: dict[str, str]) -> None: ...
-
-    @abstractmethod
-    async def close(self) -> None: ...
-
-    @abstractmethod
-    async def __aiter__(self): ...
-
-
-class WebSocketTransport(Transport):
-    async def connect(self, url: Url, headers: dict[str, str]) -> None:
-        self._ws = await connect(str(url), additional_headers=headers)
+            raise e
 
     async def send(self, data: str) -> None:
         await self._ws.send(data)
@@ -43,13 +34,3 @@ class WebSocketTransport(Transport):
                 yield message
         except ConnectionClosed:
             return
-
-
-class TransportFactory(ABC):
-    @abstractmethod
-    def create_transport(self) -> Transport: ...
-
-
-class WebSocketTransportFactory(TransportFactory):
-    def create_transport(self) -> Transport:
-        return WebSocketTransport()

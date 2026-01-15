@@ -1,66 +1,96 @@
 import asyncio
 import base64
 import json
-from typing import Any, Dict, Optional
-from pydantic import BaseModel
+from typing import Any, Dict, TypedDict, cast
 from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.transport import Transport
+from deno_sandbox.errors import RpcValidationError, UnknownRpcMethod, ZodErrorRaw
+from deno_sandbox.transport import WebSocketTransport
+from deno_sandbox.utils import (
+    convert_to_camel_case,
+    convert_to_snake_case,
+    to_snake_case,
+)
 
 
-class RpcRequest(BaseModel):
+class RpcRequest(TypedDict):
+    id: int
     method: str
-    params: Dict[str, Any]
-    id: int
+    params: dict[str, Any]
     jsonrpc: str = "2.0"
 
 
-class RpcResult[T](BaseModel):
-    ok: Optional[T] = None
-    error: Optional[Any] = None
+class RpcResult[T](TypedDict):
+    ok: T | None = None
+    error: Any | None = None
 
 
-class RpcResponse[T](BaseModel):
-    jsonrpc: str = "2.0"
-    result: Optional[RpcResult[T]] = None
-    error: Dict[str, Any] | None = None
+class RpcResponse[T](TypedDict):
     id: int
+    jsonrpc: str = "2.0"
+    result: RpcResult[T] | None = None
+    error: dict[str, Any] | None = None
 
 
 class AsyncRpcClient:
-    def __init__(self, transport: Transport):
+    def __init__(self, transport: WebSocketTransport):
         self._transport = transport
         self._id = 0
         self._pending_requests: Dict[int, asyncio.Future[Any]] = {}
-        self._listen_task = asyncio.create_task(self._listener())
+        self._listen_task: asyncio.Task[Any] | None = None
         self._pending_processes: Dict[int, asyncio.StreamReader] = {}
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def close(self):
         await self._transport.close()
 
     async def call(self, method: str, params: Dict[str, Any]) -> Any:
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
+
+        if self._listen_task is None or self._listen_task.done():
+            self._listen_task = self._loop.create_task(self._listener())
+
         req_id = self._id + 1
         self._id = req_id
 
-        payload = RpcRequest(method=method, params=params, id=req_id)
+        camel_params = convert_to_camel_case(params)
+        payload = RpcRequest(
+            method=method, params=camel_params, id=req_id, jsonrpc="2.0"
+        )
 
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
+        future = self._loop.create_future()
         self._pending_requests[req_id] = future
 
-        await self._transport.send(payload.model_dump_json())
+        await self._transport.send(json.dumps(payload))
 
         raw_response = await future
-        response = RpcResponse[Any](**raw_response)
+        response = cast(RpcResponse[Any], raw_response)
 
-        if response.error:
-            raise Exception(response.error)
+        if response.get("error") is not None:
+            if response["error"].get("message") == "Method not found":
+                raise UnknownRpcMethod("RPC method not found")
 
-        if response.result and response.result.error:
-            raise Exception(f"Application Error: {response.result.error}")
+            if response["error"].get("data") is not None:
+                data = response["error"]["data"]
+                if data.get("constructor_name") == "ZodError":
+                    # For some reason ZodError data is serialized as
+                    # json inside json ¯\_(ツ)_/¯
+                    zod_errors: list[ZodErrorRaw] = []
+                    for e in json.loads(data["message"]):
+                        value = cast(ZodErrorRaw, e)
 
-        return response.result.ok if response.result else None
+                        value["path"] = [to_snake_case(p) for p in value["path"]]
+                        zod_errors.append(value)
+
+                    raise RpcValidationError(zod_errors)
+
+            raise Exception(response["error"])
+
+        if response.get("result") and response["result"].get("error"):
+            raise Exception(f"Application Error: {response['result']['error']}")
+        return response["result"]["ok"] if response.get("result") else None
 
     async def _listener(self) -> None:
         try:
@@ -71,7 +101,8 @@ class AsyncRpcClient:
                 if req_id is not None and req_id in self._pending_requests:
                     future = self._pending_requests.pop(req_id)
                     if not future.done():
-                        future.set_result(data)
+                        converted_data = convert_to_snake_case(data)
+                        future.set_result(converted_data)
 
                 elif "method" in data:
                     method = data["method"]
