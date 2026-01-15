@@ -1,13 +1,13 @@
-from typing import Optional
 import httpx
 from pydantic import HttpUrl
 
-from deno_sandbox.options import Options, get_internal_options
+from deno_sandbox.bridge import AsyncBridge
+from deno_sandbox.options import InternalOptions
 
 
 class AsyncConsoleClient:
-    def __init__(self, options: Optional[Options] = None):
-        self._options = get_internal_options(options)
+    def __init__(self, options: InternalOptions):
+        self._options = options
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -48,32 +48,18 @@ class AsyncConsoleClient:
 
 
 class ConsoleClient:
-    def __init__(self, options: Optional[Options] = None):
-        self._options = get_internal_options(options)
-
-        self.client = httpx.Client(
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self._options['token']}",
-            }
-        )
+    def __init__(self, options: InternalOptions, bridge: AsyncBridge):
+        self._async = AsyncConsoleClient(options)
+        self._bridge = bridge
 
     def post(self, path: str, data: any) -> dict:
-        req_url = HttpUrl(self._options["console_url"], path=path)
-        response = self.client.post(req_url, json=data)
-        response.raise_for_status()
-        return response.json()
+        return self._bridge.run(self._async.post(path, data))
 
     def get(self, path: str, search: dict | None = None) -> dict:
-        req_url = HttpUrl(self._options["console_url"], path=path, search=search)
-        response = self.client.get(req_url)
-        response.raise_for_status()
-        return response.json()
+        return self._bridge.run(self._async.get(path, search))
 
     def delete(self, path: str) -> None:
-        req_url = HttpUrl(self._options["console_url"], path=path)
-        response = self.client.delete(req_url)
-        response.raise_for_status()
+        return self._bridge.run(self._async.delete(path))
 
     def close(self):
         """Explicitly close the connection pool when the client is no longer needed."""
@@ -83,7 +69,7 @@ class ConsoleClient:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
 
 
 __all__ = ["AsyncConsoleClient", "ConsoleClient"]

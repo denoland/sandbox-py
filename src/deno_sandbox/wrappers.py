@@ -1,6 +1,29 @@
-from typing import Optional, cast
-from deno_sandbox.api_types_generated import FileInfo
+from typing import Optional, TypedDict, cast
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
+
+
+class FileInfo(TypedDict):
+    is_file: bool
+    is_directory: bool
+    is_symlink: bool
+    size: int
+    mtime: str
+    atime: str
+    birthtime: str
+    ctime: str
+    dev: int
+    ino: int
+    mode: int
+    nlink: int
+    uid: int
+    gid: int
+    rdev: int
+    blksize: int
+    blocks: int
+    is_block_device: bool
+    is_char_device: bool
+    is_fifo: bool
+    is_socket: bool
 
 
 class AbortSignal:

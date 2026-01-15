@@ -7,7 +7,6 @@ from typing import (
     Any,
     AsyncIterator,
     BinaryIO,
-    Generator,
     NotRequired,
     Optional,
     TypedDict,
@@ -19,33 +18,25 @@ from deno_sandbox.api_generated import (
     AsyncSandboxDeno,
     AsyncSandboxEnv,
     AsyncSandboxFs,
-    AsyncSandboxNet,
-    AsyncSandboxVSCode,
-    AsyncSandboxProcess as GeneratedAsyncSandboxProcess,
-    SandboxProcess as GeneratedSandboxProcess,
     SandboxDeno,
     SandboxEnv,
     SandboxFs,
-    SandboxNet,
-    SandboxVSCode,
 )
 from deno_sandbox.api_types_generated import (
-    ProcessSpawnResult,
-    ProcessWaitResult,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
     SandboxMeta,
-    SpawnArgs,
     SpawnOptions,
 )
 from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
-from deno_sandbox.options import Options, get_internal_options
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.transport import (
     WebSocketTransport,
 )
+from deno_sandbox.utils import to_snake_case
+from deno_sandbox.wrappers import AbortSignal
 
 
 type Mode = Literal["connect", "create"]
@@ -64,6 +55,16 @@ class VolumeInfo(TypedDict):
     path: str
 
 
+class ChildProcessStatus(TypedDict):
+    """Whether the subprocess exited successfully, i.e. with a zero exit code."""
+
+    success: bool
+    """The exit code of the subprocess. Negative values indicate that the process was killed by a signal."""
+    code: int
+    """The signal that caused the process to exit, if any. If the process exited normally, this will be `null`."""
+    signal: AbortSignal | None
+
+
 class AppConfig(TypedDict):
     stop_at_ms: NotRequired[int | None]
     labels: NotRequired[dict[str, str] | None]
@@ -74,36 +75,55 @@ class AppConfig(TypedDict):
 
 
 class SandboxApi:
-    def __init__(self, options: Options | None = None):
-        self.__options = get_internal_options(options or Options())
-        self._client = ConsoleClient(options)
-        self._bridge = AsyncBridge()
-        self._async_sandbox = AsyncSandbox(self.__options)
+    def __init__(self, client: ConsoleClient, bridge: AsyncBridge):
+        self._bridge = bridge
+        self._client = client
+        self._async_sandbox = AsyncSandboxApi(self._client._async)
 
     @contextmanager
-    def create(self, options: Optional[SandboxCreateOptions]):
+    def create(self, options: Optional[SandboxCreateOptions] = None):
         async_cm = self._async_sandbox.create(options)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield Sandbox(rpc, async_handle.id)
+            yield Sandbox(self._client, rpc, async_handle.id)
+        except Exception:
+            import sys
+
+            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
+            raise
+        finally:
+            self._bridge.run(async_cm.__aexit__(None, None, None))
+
+    @contextmanager
+    def connect(self, options: SandboxConnectOptions):
+        async_cm = self._async_sandbox.connect(options)
+        async_handle = self._bridge.run(async_cm.__aenter__())
+
+        rpc = RpcClient(async_handle._rpc, self._bridge)
+
+        try:
+            yield Sandbox(self._client, rpc, async_handle.id)
+        except Exception:
+            import sys
+
+            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
+            raise
         finally:
             self._bridge.run(async_cm.__aexit__(None, None, None))
 
     def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
-        result = self._client.sandboxes_list(options.to_dict())
-        return [cast(SandboxMeta, i) for i in result]
+        return self._client.sandboxes_list(options)
 
 
 class AsyncSandboxApi:
     def __init__(
         self,
-        options: Optional[Options] = None,
+        client: AsyncConsoleClient,
     ):
-        self._options = get_internal_options(options)
-        self._rpc: AsyncRpcClient | None = None
+        self._client = client
 
     @asynccontextmanager
     async def create(
@@ -123,12 +143,14 @@ class AsyncSandboxApi:
 
         json_config = json.dumps(app_config, separators=(",", ":")).encode("utf-8")
 
-        url = f"{self._options['sandbox_ws_url']}api/v3/sandboxes/create"
+        url = f"{self._client._options['sandbox_ws_url']}api/v3/sandboxes/create"
+        token = self._client._options["token"]
+
         transport = WebSocketTransport()
         await transport.connect(
             url=url,
             headers={
-                "Authorization": f"Bearer {self._options['token']}",
+                "Authorization": f"Bearer {token}",
                 "x-deno-sandbox-config": base64.b64encode(json_config).decode("utf-8"),
             },
         )
@@ -136,8 +158,8 @@ class AsyncSandboxApi:
         sandbox_id = transport._ws.response.headers.get("x-deno-sandbox-id")
 
         try:
-            self._rpc = AsyncRpcClient(transport)
-            yield AsyncSandbox(self._rpc, sandbox_id)
+            rpc = AsyncRpcClient(transport)
+            yield AsyncSandbox(self._client, rpc, sandbox_id)
         finally:
             await transport.close()
 
@@ -145,18 +167,19 @@ class AsyncSandboxApi:
     async def connect(self, sandbox_id: str) -> AsyncIterator[AsyncSandbox]:
         """Connects to an existing sandbox instance."""
 
-        url = f"{self._options['sandbox_ws_url']}api/v3/sandbox/{sandbox_id}/connect"
+        url = f"{self._client._options['sandbox_ws_url']}api/v3/sandbox/{sandbox_id}/connect"
+        token = self._client._options["token"]
         transport = WebSocketTransport()
         await transport.connect(
             url=url,
             headers={
-                "Authorization": f"Bearer {self._options['token']}",
+                "Authorization": f"Bearer {token}",
             },
         )
 
         try:
             rpc = AsyncRpcClient(transport)
-            yield AsyncSandbox(rpc, sandbox_id)
+            yield AsyncSandbox(self._client, rpc, sandbox_id)
         finally:
             await transport.close()
 
@@ -166,39 +189,39 @@ class AsyncSandboxApi:
         return await self._client.sandboxes_list(options)
 
 
-class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
-    async def spawn(self, args: SpawnArgs) -> AsyncChildProcess:
-        options: RemoteProcessOptions = {
-            "stdout_inherit": args.get("stdout", "inherit") == "inherit",
-            "stderr_inherit": args.get("stderr", "inherit") == "inherit",
-        }
+# class AsyncSandboxProcess(GeneratedAsyncSandboxProcess):
+#     async def spawn(self, args: SpawnArgs) -> AsyncChildProcess:
+#         options: RemoteProcessOptions = {
+#             "stdout_inherit": args.get("stdout", "inherit") == "inherit",
+#             "stderr_inherit": args.get("stderr", "inherit") == "inherit",
+#         }
 
-        if args.get("stdout") is None:
-            args["stdout"] = "piped"
-        if args.get("stderr") is None:
-            args["stderr"] = "piped"
+#         if args.get("stdout") is None:
+#             args["stdout"] = "piped"
+#         if args.get("stderr") is None:
+#             args["stderr"] = "piped"
 
-        result: ProcessSpawnResult = await super().spawn(args)
-        return await AsyncChildProcess.create(result, self._rpc, options)
+#         result: ProcessSpawnResult = await super().spawn(args)
+#         return await AsyncChildProcess.create(result, self._rpc, options)
 
 
-class SandboxProcess(GeneratedSandboxProcess):
-    def spawn(self, args: SpawnArgs) -> ChildProcess:
-        options: RemoteProcessOptions = {
-            "stdout_inherit": args.get("stdout", "inherit") == "inherit",
-            "stderr_inherit": args.get("stderr", "inherit") == "inherit",
-        }
+# class SandboxProcess(GeneratedSandboxProcess):
+#     def spawn(self, args: SpawnArgs) -> ChildProcess:
+#         options: RemoteProcessOptions = {
+#             "stdout_inherit": args.get("stdout", "inherit") == "inherit",
+#             "stderr_inherit": args.get("stderr", "inherit") == "inherit",
+#         }
 
-        if args.get("stdout") is None:
-            args["stdout"] = "piped"
-        if args.get("stderr") is None:
-            args["stderr"] = "piped"
+#         if args.get("stdout") is None:
+#             args["stdout"] = "piped"
+#         if args.get("stderr") is None:
+#             args["stderr"] = "piped"
 
-        result: ProcessSpawnResult = super().spawn(args)
-        async_proc = self._rpc._bridge.run(
-            AsyncChildProcess.create(result, self._rpc._async_client, options)
-        )
-        return ChildProcess(result, self._rpc, async_proc)
+#         result: ProcessSpawnResult = super().spawn(args)
+#         async_proc = self._rpc._bridge.run(
+#             AsyncChildProcess.create(result, self._rpc._async_client, options)
+#         )
+#         return ChildProcess(result, self._rpc, async_proc)
 
 
 class RemoteProcessOptions(TypedDict):
@@ -243,11 +266,14 @@ class AsyncChildProcess:
 
         return instance
 
-    async def wait(self) -> int:
+    @property
+    async def status(self) -> ChildProcessStatus:
         raw = await self._wait_task
         result = cast(ProcessWaitResult, raw)
         self.returncode = result["code"]
-        return self.returncode
+        return ChildProcessStatus(
+            success=result["success"], code=result["code"], signal=result["signal"]
+        )
 
     async def _pipe_stream(self, reader: asyncio.StreamReader, writer: BinaryIO):
         """Helper to pump data from the StreamReader to a local binary stream."""
@@ -336,18 +362,37 @@ class AsyncSandbox:
         self.url: str | None = None
         self.ssh: None = None
         self.id = sandbox_id
-        self.fs = AsyncSandboxFs(rpc)
-        self.deno = AsyncSandboxDeno(rpc)
-        self.env = AsyncSandboxEnv(rpc)
-        self.vscode = AsyncSandboxVSCode(rpc)
-        self.process = AsyncSandboxProcess(rpc)
+        self.fs = AsyncSandboxFs(client, rpc)
+        self.deno = AsyncSandboxDeno(client, rpc)
+        self.env = AsyncSandboxEnv(client, rpc)
 
     @property
     def closed(self) -> bool:
         return self._rpc._transport.closed
 
-    async def spawn(command: str, options: Optional[SpawnOptions]) -> AsyncChildProcess:
-        pass
+    async def spawn(
+        self, command: str, options: Optional[SpawnOptions] = None
+    ) -> AsyncChildProcess:
+        print("Spawning command:", command)
+        params = {
+            "command": command,
+            "stdout": "inherit",
+            "stderr": "inherit",
+        }
+
+        if options is not None:
+            for key, value in options.items():
+                if value is not None:
+                    params[to_snake_case(key)] = value
+
+        opts = RemoteProcessOptions(
+            stdout_inherit=params["stdout"] == "inherit",
+            stderr_inherit=params["stderr"] == "inherit",
+        )
+
+        # FIXME type this result
+        result = await self._rpc.call("spawn", params)
+        return await AsyncChildProcess.create(result, self._rpc, opts)
 
     # FIXME
     async def fetch() -> Any:
@@ -378,6 +423,60 @@ class AsyncSandbox:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
+
+
+class Sandbox:
+    def __init__(self, client: ConsoleClient, rpc: RpcClient, sandbox_id: str):
+        self._client = client
+        self._rpc = rpc
+        self._async = AsyncSandbox(self._client._async, rpc._async_client, sandbox_id)
+
+        self.url: str | None = None
+        self.ssh: None = None
+        self.id = sandbox_id
+        self.fs = SandboxFs(client, rpc)
+        self.deno = SandboxDeno(client, rpc)
+        self.env = SandboxEnv(client, rpc)
+
+    @property
+    def closed(self) -> bool:
+        return self._rpc._async_client._transport.closed
+
+    def spawn(
+        self, command: str, options: Optional[SpawnOptions] = None
+    ) -> ChildProcess:
+        async_child = self._client._bridge.run(self._async.spawn(command, options))
+        return ChildProcess(self._rpc, async_child)
+
+    # FIXME
+    def fetch() -> Any:
+        pass
+
+    def close(self) -> None:
+        self._client._bridge.run(self._async.close())
+
+    def kill(self) -> None:
+        self._client._bridge.run(self._async.kill())
+
+    def extend_timeout(self, additional_s: int) -> None:
+        self._client._bridge.run(self._async.extend_timeout(additional_s))
+
+    def expose_http(self, portOrPid: int) -> str:
+        self._client._bridge.run(self._async.expose_http(portOrPid))
+
+    def expose_ssh(self, portOrPid: int) -> str:
+        self._client._bridge.run(self._async.expose_ssh(portOrPid))
+
+    def expose_vscode(
+        self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
+    ) -> VsCode:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._client._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
 
 
 class AsyncVsCode:
@@ -413,65 +512,34 @@ class AsyncVsCode:
         await self.status
 
 
-class Sandbox:
-    def __init__(self, rpc: RpcClient, sandbox_id: str):
+class VsCode:
+    """Experimental! A VSCode instance running inside the sandbox."""
+
+    def __init__(self, rpc: RpcClient, url: str):
         self._rpc = rpc
-        self.url: str | None = None
-        self.id = sandbox_id
-        self.fs = SandboxFs(rpc)
-        self.net = SandboxNet(rpc)
-        self.deno = SandboxDeno(rpc)
-        self.vscode = SandboxVSCode(rpc)
-        self.env = SandboxEnv(rpc)
-        self.process = SandboxProcess(rpc)
+        self.url = url
 
-    def abort(self) -> None:
-        self._rpc.call("abort", {"abortId": self.id})
+    @property
+    def stdout(self):
+        # FIXME
+        pass
 
+    @property
+    def stderr(self):
+        # FIXME
+        pass
 
-class SandboxWrapper:
-    def __init__(self, options: Optional[Options] = None):
-        self._bridge = AsyncBridge()
-        self._async_sandbox = AsyncSandboxApi(options)
+    @property
+    def status(self):
+        # FIXME
+        pass
 
-    @contextmanager
-    def create(
-        self, options: Optional[SandboxCreateOptions] = None
-    ) -> Generator[Sandbox, Any, Any]:
-        async_cm = self._async_sandbox.create(options)
-        async_handle = self._bridge.run(async_cm.__aenter__())
+    async def kill(self) -> None:
+        pass
 
-        rpc = RpcClient(async_handle._rpc, self._bridge)
+    async def __aenter__(self):
+        return self
 
-        try:
-            yield Sandbox(rpc, async_handle.id)
-        except Exception:
-            import sys
-
-            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
-            raise
-        finally:
-            self._bridge.run(async_cm.__aexit__(None, None, None))
-
-    @contextmanager
-    def connect(self, options: SandboxConnectOptions):
-        async_cm = self._async_sandbox.connect(options)
-        async_handle = self._bridge.run(async_cm.__aenter__())
-
-        rpc = RpcClient(async_handle._rpc, self._bridge)
-
-        try:
-            yield Sandbox(rpc, async_handle.id)
-        except Exception:
-            import sys
-
-            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
-            raise
-        finally:
-            self._bridge.run(async_cm.__aexit__(None, None, None))
-
-    def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
-        return self._client.sandboxes_list(options)
-
-    def close(self):
-        self._bridge.stop()
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.kill()
+        await self.status

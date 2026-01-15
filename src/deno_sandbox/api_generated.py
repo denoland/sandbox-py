@@ -21,7 +21,6 @@ from deno_sandbox.api_types_generated import (
     DirEntry,
     RemoveOptions,
     MkdirOptions,
-    FileInfo,
     WalkOptions,
     WalkEntry,
     ExpandGlobOptions,
@@ -38,6 +37,7 @@ from deno_sandbox.rpc import RpcClient, AsyncRpcClient
 from deno_sandbox.utils import convert_to_camel_case, convert_to_snake_case
 from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
 from deno_sandbox.wrappers import (
+    FileInfo,
     FsFile,
     AsyncFsFile,
     DenoProcess,
@@ -318,11 +318,11 @@ class SandboxFs:
         return result
 
     def write_text_file(
-        self, path: str, data: str, options: Optional[WriteFileOptions] = None
+        self, path: str, content: str, options: Optional[WriteFileOptions] = None
     ) -> None:
         """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
 
-        params = {"path": path, "data": data}
+        params = {"path": path, "content": content}
         if options is not None:
             params["options"] = convert_to_camel_case(options)
 
@@ -572,11 +572,11 @@ class AsyncSandboxFs:
         return result
 
     async def write_text_file(
-        self, path: str, data: str, options: Optional[WriteFileOptions] = None
+        self, path: str, content: str, options: Optional[WriteFileOptions] = None
     ) -> None:
         """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
 
-        params = {"path": path, "data": data}
+        params = {"path": path, "content": content}
         if options is not None:
             params["options"] = convert_to_camel_case(options)
 

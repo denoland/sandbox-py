@@ -30,11 +30,9 @@ async def test_connect_async():
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
-            await connected_sandbox.fs.write_text_file(
-                {"path": "foo.txt", "content": "foo"}
-            )
+            await connected_sandbox.fs.write_text_file("foo.txt", "foo")
 
-        content = await sandbox.fs.read_text_file({"path": "foo.txt"})
+        content = await sandbox.fs.read_text_file("foo.txt")
         assert content == "foo"
 
 
@@ -46,9 +44,9 @@ def test_connect_sync():
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
-            connected_sandbox.fs.write_text_file({"path": "foo.txt", "content": "foo"})
+            connected_sandbox.fs.write_text_file("foo.txt", "foo")
 
-        content = sandbox.fs.read_text_file({"path": "foo.txt"})
+        content = sandbox.fs.read_text_file("foo.txt")
         assert content == "foo"
 
 
@@ -56,16 +54,16 @@ def test_connect_sync():
 async def test_write_read_text_file_async(async_shared_sandbox):
     sb = async_shared_sandbox
     path = "foo.txt"
-    await sb.fs.write_text_file({"path": path, "content": "foo"})
-    content = await sb.fs.read_text_file({"path": path})
+    await sb.fs.write_text_file(path, "foo")
+    content = await sb.fs.read_text_file(path)
     assert content == "foo"
 
 
 def test_write_read_text_file_sync(shared_sandbox) -> None:
     sb = shared_sandbox
 
-    sb.fs.write_text_file({"path": "foo.txt", "content": "foo"})
-    content = sb.fs.read_text_file({"path": "foo.txt"})
+    sb.fs.write_text_file("foo.txt", "foo")
+    content = sb.fs.read_text_file("foo.txt")
     assert content == "foo"
 
 
@@ -73,13 +71,13 @@ def test_write_read_text_file_sync(shared_sandbox) -> None:
 async def test_spawn_async(async_shared_sandbox) -> None:
     sb = async_shared_sandbox
 
-    p = await sb.process.spawn(
+    p = await sb.spawn(
+        "npx",
         {
-            "command": "npx",
             "args": ["cowsay", "foo"],
             "stdout": "piped",
             "stderr": "piped",
-        }
+        },
     )
     code = await p.wait()
     assert code == 0
@@ -93,13 +91,13 @@ async def test_spawn_async(async_shared_sandbox) -> None:
 async def test_spawn_sync(shared_sandbox) -> None:
     sb = shared_sandbox
 
-    p = sb.process.spawn(
+    p = sb.spawn(
+        "npx",
         {
-            "command": "npx",
             "args": ["cowsay", "foo"],
             "stdout": "piped",
             "stderr": "piped",
-        }
+        },
     )
     code = p.wait()
     assert code == 0
