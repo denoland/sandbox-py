@@ -1,28 +1,27 @@
 import os
 
-from typing import Optional, TypedDict
-from urllib.parse import urlparse
+from typing import NotRequired, Optional, TypedDict
 
-from pydantic_core import Url
+from httpx import URL
 
 from deno_sandbox.errors import MissingApiToken
 
 
 class Options(TypedDict):
-    token: str | Url | None = None
-    regions: list[str] | None = None
+    token: NotRequired[str | None]
+    regions: NotRequired[list[str] | None]
 
 
 class InternalOptions(TypedDict):
-    sandbox_ws_url: Url
-    console_url: Url
-    token: Url
+    sandbox_ws_url: URL
+    console_url: URL
+    token: str
     regions: list[str]
 
 
 def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
-    url = urlparse(
-        os.environ.get("DENO_DEPLOY_URL", "https://ams.sandbox-api.deno.net")
+    sandbox_url = URL(
+        os.environ.get("DENO_SANDBOX_ENDPOINT", "https://ams.sandbox-api.deno.net")
     )
 
     token = options and options["token"] or os.environ.get("DENO_DEPLOY_TOKEN", None)
@@ -30,11 +29,12 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
     if token is None:
         raise MissingApiToken({"message": "DENO_DEPLOY_TOKEN is not set"})
 
-    scheme = url.scheme.replace("http", "ws")
-    sandbox_ws_url = Url(f"{scheme}://{url.netloc}")
+    scheme = sandbox_url.scheme.replace("http", "ws")
+    sandbox_ws_url = URL(f"{scheme}://{sandbox_url.netloc}")
 
-    console_url = os.environ.get("DENO_DEPLOY_CONSOLE_URL", "https://console.deno.com")
-    parsed_console_url = urlparse(console_url)
+    console_url = URL(
+        os.environ.get("DENO_DEPLOY_ENDPOINT", "https://console.deno.com")
+    )
 
     regions = (
         options
@@ -43,7 +43,7 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
     )
 
     return InternalOptions(
-        console_url=parsed_console_url,
+        console_url=console_url,
         sandbox_ws_url=sandbox_ws_url,
         token=token,
         regions=regions,
