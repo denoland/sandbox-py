@@ -1,4 +1,7 @@
-from typing import Optional, TypedDict, cast
+import asyncio
+import sys
+from typing import BinaryIO, Optional, TypedDict, cast
+from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 
 
@@ -180,17 +183,183 @@ class FsFile:
         self.close()
 
 
-class DenoProcess:
-    pass
+class RemoteProcessOptions(TypedDict):
+    stdout_inherit: bool
+    stderr_inherit: bool
+
+
+class ProcessSpawnResult(TypedDict):
+    pid: int
+    stdout_stream_id: int
+    stderr_stream_id: int
+
+
+class ProcessWaitResult(TypedDict):
+    success: bool
+    code: int
+    signal: AbortSignal | None
+
+
+class ChildProcessStatus(TypedDict):
+    """Whether the subprocess exited successfully, i.e. with a zero exit code."""
+
+    success: bool
+    """The exit code of the subprocess. Negative values indicate that the process was killed by a signal."""
+    code: int
+    """The signal that caused the process to exit, if any. If the process exited normally, this will be `null`."""
+    signal: AbortSignal | None
+
+
+class AsyncChildProcess:
+    def __init__(
+        self,
+        pid: int,
+        stdout: asyncio.StreamReader,
+        stderr: asyncio.StreamReader,
+        wait_task: asyncio.Task,
+        rpc: AsyncRpcClient,
+    ):
+        self.pid = pid
+        self.stdout = stdout
+        self.stderr = stderr
+        self._wait_task = wait_task
+        self.returncode = None
+        self._rpc = rpc
+
+    @classmethod
+    async def create(
+        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+    ) -> AsyncChildProcess:
+        return create_process_like(cls, res, rpc, options)
+
+    @property
+    async def status(self) -> ChildProcessStatus:
+        raw = await self._wait_task
+        result = cast(ProcessWaitResult, raw)
+        return ChildProcessStatus(
+            success=result["success"], code=result["code"], signal=result["signal"]
+        )
+
+    async def _pipe_stream(self, reader: asyncio.StreamReader, writer: BinaryIO):
+        """Helper to pump data from the StreamReader to a local binary stream."""
+        try:
+            while not reader.at_eof():
+                data = await reader.read(1024)
+                if not data:
+                    break
+
+                writer.write(data)
+                writer.flush()
+        except Exception:
+            # Handle potential connection drops or closed pipes silently
+            pass
+
+
+def create_process_like[T](
+    cls: T, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+) -> T:
+    pid = res["pid"]
+
+    stdout = asyncio.StreamReader()
+    stderr = asyncio.StreamReader()
+
+    rpc._pending_processes[res["stdout_stream_id"]] = stdout
+    rpc._pending_processes[res["stderr_stream_id"]] = stderr
+
+    wait_task = rpc._loop.create_task(rpc.call("processWait", {"pid": pid}))
+
+    instance = cls(pid, stdout, stderr, wait_task, rpc)
+
+    if options.get("stdout_inherit"):
+        rpc._loop.create_task(instance._pipe_stream(stdout, sys.stdout.buffer))
+    if options.get("stderr_inherit"):
+        rpc._loop.create_task(instance._pipe_stream(stderr, sys.stderr.buffer))
+
+    return instance
+
+
+class SyncStreamReader:
+    """Wraps asyncio.StreamReader to provide synchronous read methods."""
+
+    def __init__(self, bridge: AsyncBridge, reader: asyncio.StreamReader):
+        self._bridge = bridge
+        self._reader = reader
+
+    def read(self, n: int = -1) -> bytes:
+        return self._bridge.run(self._reader.read(n))
+
+    def readline(self) -> bytes:
+        return self._bridge.run(self._reader.readline())
+
+    def readexactly(self, n: int) -> bytes:
+        return self._bridge.run(self._reader.readexactly(n))
+
+
+class ChildProcess:
+    def __init__(
+        self,
+        rpc: RpcClient,
+        async_proc: AsyncChildProcess,
+    ):
+        self._rpc = rpc
+
+        self._async_proc = async_proc
+        self.stdout = SyncStreamReader(rpc._bridge, self._async_proc.stdout)
+        self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
+        self.returncode: int | None = None
+
+    @property
+    def pid(self) -> int:
+        return self._async_proc.pid
+
+    @property
+    def status(self) -> ChildProcessStatus:
+        return self._rpc._bridge.run(self._async_proc.status)
 
 
 class AsyncDenoProcess:
     pass
 
 
+class DenoProcess:
+    pass
+
+
+class AsyncDenoRepl(AsyncChildProcess):
+    @classmethod
+    async def create(
+        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+    ) -> AsyncDenoRepl:
+        return create_process_like(cls, res, rpc, options)
+
+    async def eval(self, code: str) -> str:
+        """Evaluate code in the REPL and return the output."""
+
+        return await self._rpc.call("denoReplEval", {"code": code, "pid": self.pid})
+
+
 class DenoRepl:
-    pass
+    def __init__(
+        self,
+        rpc: RpcClient,
+        async_proc: AsyncDenoRepl,
+    ):
+        self._rpc = rpc
 
+        self._async_proc = async_proc
+        self.stdout = SyncStreamReader(rpc._bridge, self._async_proc.stdout)
+        self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
+        self.returncode: int | None = None
 
-class AsyncDenoRepl:
-    pass
+    def eval(self, code: str) -> str:
+        """Evaluate code in the REPL and return the output."""
+
+        return self._rpc._bridge.run(self._async_proc.eval(code))
+
+    @property
+    def pid(self) -> int:
+        return self._async_proc.pid
+
+    @property
+    def status(self) -> ChildProcessStatus:
+        return self._rpc._bridge.run(self._async_proc.status)

@@ -1,28 +1,25 @@
-import asyncio
 import base64
 from contextlib import asynccontextmanager, contextmanager
 import json
-import sys
 from typing import (
     Any,
     AsyncIterator,
-    BinaryIO,
     NotRequired,
     Optional,
     TypedDict,
-    cast,
 )
 from typing_extensions import Literal
 
 from deno_sandbox.api_generated import (
-    AsyncSandboxDeno,
+    AsyncSandboxDeno as AsyncSandboxDenoGenerated,
     AsyncSandboxEnv,
     AsyncSandboxFs,
-    SandboxDeno,
+    SandboxDeno as SandboxDenoGenerated,
     SandboxEnv,
     SandboxFs,
 )
 from deno_sandbox.api_types_generated import (
+    DenoReplOptions,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
@@ -35,8 +32,14 @@ from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.transport import (
     WebSocketTransport,
 )
-from deno_sandbox.utils import to_snake_case
-from deno_sandbox.wrappers import AbortSignal
+from deno_sandbox.utils import to_camel_case, to_snake_case
+from deno_sandbox.wrappers import (
+    AsyncChildProcess,
+    AsyncDenoRepl,
+    ChildProcess,
+    ProcessSpawnResult,
+    RemoteProcessOptions,
+)
 
 
 type Mode = Literal["connect", "create"]
@@ -55,16 +58,6 @@ class VolumeInfo(TypedDict):
     path: str
 
 
-class ChildProcessStatus(TypedDict):
-    """Whether the subprocess exited successfully, i.e. with a zero exit code."""
-
-    success: bool
-    """The exit code of the subprocess. Negative values indicate that the process was killed by a signal."""
-    code: int
-    """The signal that caused the process to exit, if any. If the process exited normally, this will be `null`."""
-    signal: AbortSignal | None
-
-
 class AppConfig(TypedDict):
     stop_at_ms: NotRequired[int | None]
     labels: NotRequired[dict[str, str] | None]
@@ -72,18 +65,6 @@ class AppConfig(TypedDict):
     volumes: NotRequired[list[VolumeInfo] | None]
     allow_net: NotRequired[list]
     secrets: NotRequired[dict[str, SecretConfig] | None]
-
-
-class ProcessSpawnResult(TypedDict):
-    pid: int
-    stdout_stream_id: int
-    stderr_stream_id: int
-
-
-class ProcessWaitResult(TypedDict):
-    success: bool
-    code: int
-    signal: AbortSignal | None
 
 
 class SandboxApi:
@@ -206,110 +187,6 @@ class AsyncSandboxApi:
         return await self._client.sandboxes_list(options)
 
 
-class RemoteProcessOptions(TypedDict):
-    stdout_inherit: bool
-    stderr_inherit: bool
-
-
-class AsyncChildProcess:
-    def __init__(
-        self,
-        pid: int,
-        stdout: asyncio.StreamReader,
-        stderr: asyncio.StreamReader,
-        wait_task: asyncio.Task,
-    ):
-        self.pid = pid
-        self.stdout = stdout
-        self.stderr = stderr
-        self._wait_task = wait_task
-        self.returncode = None
-
-    @classmethod
-    async def create(
-        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
-    ) -> AsyncChildProcess:
-        pid = res["pid"]
-
-        stdout = asyncio.StreamReader()
-        stderr = asyncio.StreamReader()
-
-        rpc._pending_processes[res["stdout_stream_id"]] = stdout
-        rpc._pending_processes[res["stderr_stream_id"]] = stderr
-
-        wait_task = rpc._loop.create_task(rpc.call("processWait", {"pid": pid}))
-
-        instance = cls(pid, stdout, stderr, wait_task)
-
-        if options.get("stdout_inherit"):
-            rpc._loop.create_task(instance._pipe_stream(stdout, sys.stdout.buffer))
-        if options.get("stderr_inherit"):
-            rpc._loop.create_task(instance._pipe_stream(stderr, sys.stderr.buffer))
-
-        return instance
-
-    @property
-    async def status(self) -> ChildProcessStatus:
-        raw = await self._wait_task
-        result = cast(ProcessWaitResult, raw)
-        return ChildProcessStatus(
-            success=result["success"], code=result["code"], signal=result["signal"]
-        )
-
-    async def _pipe_stream(self, reader: asyncio.StreamReader, writer: BinaryIO):
-        """Helper to pump data from the StreamReader to a local binary stream."""
-        try:
-            while not reader.at_eof():
-                data = await reader.read(1024)
-                if not data:
-                    break
-
-                writer.write(data)
-                writer.flush()
-        except Exception:
-            # Handle potential connection drops or closed pipes silently
-            pass
-
-
-class SyncStreamReader:
-    """Wraps asyncio.StreamReader to provide synchronous read methods."""
-
-    def __init__(self, bridge: AsyncBridge, reader: asyncio.StreamReader):
-        self._bridge = bridge
-        self._reader = reader
-
-    def read(self, n: int = -1) -> bytes:
-        return self._bridge.run(self._reader.read(n))
-
-    def readline(self) -> bytes:
-        return self._bridge.run(self._reader.readline())
-
-    def readexactly(self, n: int) -> bytes:
-        return self._bridge.run(self._reader.readexactly(n))
-
-
-class ChildProcess:
-    def __init__(
-        self,
-        rpc: RpcClient,
-        async_proc: AsyncChildProcess,
-    ):
-        self._rpc = rpc
-
-        self._async_proc = async_proc
-        self.stdout = SyncStreamReader(rpc._bridge, self._async_proc.stdout)
-        self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
-        self.returncode: int | None = None
-
-    @property
-    def pid(self) -> int:
-        return self._async_proc.pid
-
-    @property
-    def status(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async_proc.status)
-
-
 class VsCodeOptions(TypedDict):
     env: NotRequired[dict[str, str] | None]
     """Environment variables to pass to the VS Code instance."""
@@ -332,6 +209,42 @@ class VsCodeOptions(TypedDict):
 
     editor_settings: NotRequired[dict[str, Any] | None]
     """The value for the default settings.json that VSCode will use."""
+
+
+class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
+    async def eval(self, code: str) -> Any:
+        repl = await self.repl()
+        return await repl.eval(code)
+
+    async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
+        params = {"stdout": "piped", "stderr": "piped"}
+
+        opts = RemoteProcessOptions(stdout_inherit=True, stderr_inherit=True)
+
+        if options is not None:
+            for key, value in options.items():
+                if value is not None:
+                    if key == "stdout" or key == "stderr":
+                        if value == "inherit":
+                            continue
+                        else:
+                            opts[f"{key}_inherit"] = False
+
+                    params[to_camel_case(key)] = value
+
+        result: ProcessSpawnResult = await self._rpc.call("spawnDenoRepl", params)
+
+        return await AsyncDenoRepl.create(result, self._rpc, opts)
+
+
+class SandboxDeno(SandboxDenoGenerated):
+    def __init__(self, client: ConsoleClient, rpc: RpcClient):
+        super().__init__(client, rpc)
+
+        self._async = AsyncSandboxDeno(self._client._async, rpc._async_client)
+
+    def eval(self, code: str) -> Any:
+        return self._client._bridge.run(self._async.eval(code))
 
 
 class AsyncSandbox:
