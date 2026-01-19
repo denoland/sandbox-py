@@ -20,6 +20,7 @@ from deno_sandbox.api_generated import (
 )
 from deno_sandbox.api_types_generated import (
     DenoReplOptions,
+    DenoRunOptions,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
@@ -35,8 +36,11 @@ from deno_sandbox.transport import (
 from deno_sandbox.utils import to_camel_case, to_snake_case
 from deno_sandbox.wrappers import (
     AsyncChildProcess,
+    AsyncDenoProcess,
     AsyncDenoRepl,
     ChildProcess,
+    DenoProcess,
+    DenoRepl,
     ProcessSpawnResult,
     RemoteProcessOptions,
 )
@@ -212,9 +216,41 @@ class VsCodeOptions(TypedDict):
 
 
 class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
+    async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
+        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
+
+        params = {
+            "stdout": "inherit",
+            "stderr": "inherit",
+        }
+
+        if options is not None:
+            for key, value in options.items():
+                if value is not None:
+                    params[to_snake_case(key)] = value
+
+        if "code" in params and "extension" not in params:
+            params["extension"] = "ts"
+
+        opts = RemoteProcessOptions(
+            stdout_inherit=params["stdout"] == "inherit",
+            stderr_inherit=params["stderr"] == "inherit",
+        )
+
+        if params["stdout"] == "inherit":
+            params["stdout"] = "piped"
+        if params["stderr"] == "inherit":
+            params["stderr"] = "piped"
+
+        result = await self._rpc.call("spawnDeno", params)
+
+        return await AsyncDenoProcess.create(result, self._rpc, opts)
+
     async def eval(self, code: str) -> Any:
         repl = await self.repl()
-        return await repl.eval(code)
+        result = await repl.eval(code)
+        await repl.close()
+        return result
 
     async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
         params = {"stdout": "piped", "stderr": "piped"}
@@ -243,8 +279,16 @@ class SandboxDeno(SandboxDenoGenerated):
 
         self._async = AsyncSandboxDeno(self._client._async, rpc._async_client)
 
+    def run(self, options: DenoRunOptions) -> DenoProcess:
+        async_deno = self._client._bridge.run(self._async.run(options))
+        return DenoProcess(self._rpc, async_deno)
+
     def eval(self, code: str) -> Any:
         return self._client._bridge.run(self._async.eval(code))
+
+    def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
+        async_repl = self._client._bridge.run(self._async.repl(options))
+        return DenoRepl(self._rpc, async_repl)
 
 
 class AsyncSandbox:

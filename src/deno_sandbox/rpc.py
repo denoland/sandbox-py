@@ -5,7 +5,12 @@ from typing import Any, Dict, TypedDict, cast
 from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.errors import RpcValidationError, UnknownRpcMethod, ZodErrorRaw
+from deno_sandbox.errors import (
+    ProcessAlreadyExited,
+    RpcValidationError,
+    UnknownRpcMethod,
+    ZodErrorRaw,
+)
 from deno_sandbox.transport import WebSocketTransport
 from deno_sandbox.utils import (
     convert_to_camel_case,
@@ -41,6 +46,11 @@ class AsyncRpcClient:
         self._listen_task: asyncio.Task[Any] | None = None
         self._pending_processes: Dict[int, asyncio.StreamReader] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._signal_id = 0
+
+    def get_next_signal_id(self) -> int:
+        self._signal_id += 1
+        return self._signal_id
 
     async def close(self):
         await self._transport.close()
@@ -89,7 +99,16 @@ class AsyncRpcClient:
             raise Exception(response["error"])
 
         if response.get("result") and response["result"].get("error"):
-            raise Exception(f"Application Error: {response['result']['error']}")
+            err = response["result"]["error"]
+            if (
+                "constructor_name" in err
+                and err["constructor_name"] == "TypeError"
+                and "code" in err
+                and err["code"] == "ENOENT"
+            ):
+                raise ProcessAlreadyExited("Process has already exited")
+
+            raise Exception(f"Application Error: {err}")
         return response["result"]["ok"] if response.get("result") else None
 
     async def _listener(self) -> None:
@@ -133,6 +152,9 @@ class RpcClient:
     def __init__(self, async_client: AsyncRpcClient, bridge: AsyncBridge):
         self._async_client = async_client
         self._bridge = bridge
+
+    def get_next_signal_id(self) -> int:
+        return self._async_client.get_next_signal_id()
 
     def call(self, method: str, params: Dict[str, Any]) -> Any:
         return self._bridge.run(self._async_client.call(method, params))

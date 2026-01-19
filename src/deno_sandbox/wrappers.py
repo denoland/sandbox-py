@@ -1,7 +1,9 @@
 import asyncio
 import sys
-from typing import BinaryIO, Optional, TypedDict, cast
+from typing import Any, BinaryIO, Optional, TypedDict, cast
+from typing_extensions import Literal
 from deno_sandbox.bridge import AsyncBridge
+from deno_sandbox.errors import HTTPStatusError, ProcessAlreadyExited
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 
 
@@ -225,6 +227,8 @@ class AsyncChildProcess:
         self._wait_task = wait_task
         self.returncode = None
         self._rpc = rpc
+        self._stdout_task: Optional[asyncio.Task] = None
+        self._stderr_task: Optional[asyncio.Task] = None
 
     @classmethod
     async def create(
@@ -254,6 +258,21 @@ class AsyncChildProcess:
             # Handle potential connection drops or closed pipes silently
             pass
 
+    async def kill(self) -> None:
+        """Kill the process."""
+
+        try:
+            await self._rpc.call("processKill", {"pid": self.pid})
+        except ProcessAlreadyExited:
+            # Process already exited
+            pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.kill()
+
 
 def create_process_like[T](
     cls: T, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
@@ -271,9 +290,13 @@ def create_process_like[T](
     instance = cls(pid, stdout, stderr, wait_task, rpc)
 
     if options.get("stdout_inherit"):
-        rpc._loop.create_task(instance._pipe_stream(stdout, sys.stdout.buffer))
+        instance._stdout_task = rpc._loop.create_task(
+            instance._pipe_stream(stdout, sys.stdout.buffer)
+        )
     if options.get("stderr_inherit"):
-        rpc._loop.create_task(instance._pipe_stream(stderr, sys.stderr.buffer))
+        instance._stderr_task = rpc._loop.create_task(
+            instance._pipe_stream(stderr, sys.stderr.buffer)
+        )
 
     return instance
 
@@ -316,13 +339,97 @@ class ChildProcess:
     def status(self) -> ChildProcessStatus:
         return self._rpc._bridge.run(self._async_proc.status)
 
+    def __enter__(self):
+        return self
 
-class AsyncDenoProcess:
-    pass
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._rpc._bridge.run(self._async_proc.__aexit__(exc_type, exc_val, exc_tb))
 
 
-class DenoProcess:
-    pass
+class AsyncDenoProcess(AsyncChildProcess):
+    def __init__(self, pid, stdout, stderr, wait_task, rpc):
+        super().__init__(pid, stdout, stderr, wait_task, rpc)
+        self._listening_task: asyncio.Task | None = None
+
+    @classmethod
+    async def create(
+        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+    ) -> AsyncDenoProcess:
+        p = create_process_like(cls, res, rpc, options)
+
+        p._listening_task = rpc._loop.create_task(
+            rpc.call("denoHttpWait", {"pid": p.pid})
+        )
+        return p
+
+    async def wait_http_ready(self) -> bool:
+        """Whether the Deno process is ready to accept HTTP requests."""
+
+        if self._listening_task is not None:
+            return await self._listening_task
+
+        return False
+
+    async def fetch(
+        self,
+        url: str,
+        method: Optional[str] = "GET",
+        headers: Optional[dict[str, str]] = None,
+        redirect: Literal["follow", "manual"] = None,
+    ) -> AsyncFetchResponse:
+        """Fetch a URL from the Deno process."""
+
+        abort_id = self._rpc.get_next_signal_id()
+
+        params: FetchParams = {
+            "method": method,
+            "url": url,
+            "redirect": redirect or "follow",
+            "pid": self.pid,
+            "abortId": abort_id,
+        }
+
+        if headers is not None:
+            params["headers"] = list(headers.items())
+        else:
+            params["headers"] = []
+
+        response: FetchResponseData = await self._rpc.call("fetch", params)
+        return AsyncFetchResponse(rpc=self._rpc, response=response)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._listening_task is not None:
+            self._listening_task.cancel()
+        await super().__aexit__(exc_type, exc_val, exc_tb)
+
+
+class DenoProcess(ChildProcess):
+    def __init__(
+        self,
+        rpc: RpcClient,
+        async_proc: AsyncChildProcess,
+    ):
+        super().__init__(rpc, async_proc)
+
+    def wait_http_ready(self) -> bool:
+        """Whether the Deno process is ready to accept HTTP requests."""
+
+        return self._rpc._bridge.run(self._async_proc.wait_http_ready())
+
+    def fetch(
+        self,
+        url: str,
+        method: Optional[str] = "GET",
+        headers: Optional[dict[str, str]] = None,
+        redirect: Literal["follow", "manual"] = None,
+    ) -> FetchResponse:
+        """Fetch a URL from the Deno process."""
+
+        result = self._rpc._bridge.run(
+            self._async_proc.fetch(url, method, headers, redirect)
+        )
+
+        return FetchResponse(self._rpc, result)
 
 
 class AsyncDenoRepl(AsyncChildProcess):
@@ -335,7 +442,29 @@ class AsyncDenoRepl(AsyncChildProcess):
     async def eval(self, code: str) -> str:
         """Evaluate code in the REPL and return the output."""
 
-        return await self._rpc.call("denoReplEval", {"code": code, "pid": self.pid})
+        result = await self._rpc.call("denoReplEval", {"code": code, "pid": self.pid})
+
+        return result
+
+    async def call(self, fn: str, args: list[Any]) -> Any:
+        """Call a function in the REPL process."""
+
+        result = await self._rpc.call(
+            "denoReplCall", {"pid": self.pid, "fn": fn, "args": args}
+        )
+
+        return result
+
+    async def close(self) -> None:
+        """Close the REPL process."""
+
+        await self._rpc.call("denoReplClose", {"pid": self.pid})
+        self._wait_task.cancel()
+        self._stdout_task.cancel()
+        self._stderr_task.cancel()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
 
 class DenoRepl:
@@ -346,20 +475,167 @@ class DenoRepl:
     ):
         self._rpc = rpc
 
-        self._async_proc = async_proc
-        self.stdout = SyncStreamReader(rpc._bridge, self._async_proc.stdout)
-        self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
+        self._async = async_proc
+        self.stdout = SyncStreamReader(rpc._bridge, self._async.stdout)
+        self.stderr = SyncStreamReader(rpc._bridge, self._async.stderr)
         self.returncode: int | None = None
 
     def eval(self, code: str) -> str:
         """Evaluate code in the REPL and return the output."""
 
-        return self._rpc._bridge.run(self._async_proc.eval(code))
+        return self._rpc._bridge.run(self._async.eval(code))
+
+    def call(self, fn: str, args: list[Any]) -> Any:
+        """Call a function in the REPL process."""
+
+        return self._rpc._bridge.run(self._async.call(fn, args))
+
+    def close(self) -> None:
+        """Close the REPL process."""
+
+        self._rpc._bridge.run(self._async.close())
 
     @property
     def pid(self) -> int:
-        return self._async_proc.pid
+        return self._async.pid
 
     @property
     def status(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async_proc.status)
+        return self._rpc._bridge.run(self._async.status)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._rpc._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
+
+
+class FetchParams(TypedDict):
+    method: str
+    url: str
+    headers: list[tuple[str, str]]
+    redirect: str
+    pid: int
+    abortId: int
+
+
+class FetchResponseData(TypedDict):
+    status: int
+    status_text: str
+    headers: list[tuple[str, str]]
+    body_stream_id: int
+
+
+class AsyncFetchResponse:
+    def __init__(self, rpc: AsyncRpcClient, response: FetchResponseData):
+        self._rpc = rpc
+        self._response = response
+
+    def raise_for_status(self) -> HTTPStatusError | None:
+        if self.is_success:
+            return
+
+        message = "{self} resulted in a {error_type} (status code: {self.status})"
+        status_class = self.status // 100
+        error_types = {
+            1: "Informational response",
+            3: "Redirect response",
+            4: "Client error",
+            5: "Server error",
+        }
+        error_type = error_types.get(status_class, "Invalid status code")
+        message = message.format(self, error_type=error_type)
+
+        return HTTPStatusError(self.status, message)
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {k: v for k, v in self._response["headers"]}
+
+    @property
+    def status_code(self) -> int:
+        return self._response["status"]
+
+    @property
+    def is_informational(self) -> int:
+        return 100 <= self.status_code <= 199
+
+    @property
+    def is_success(self) -> int:
+        return 200 <= self.status_code <= 299
+
+    @property
+    def is_redirect(self) -> int:
+        return 300 <= self.status_code <= 399
+
+    @property
+    def is_client_error(self) -> int:
+        return 400 <= self.status_code <= 499
+
+    @property
+    def is_server_error(self) -> int:
+        return 500 <= self.status_code <= 599
+
+    @property
+    def is_error(self) -> int:
+        return 400 <= self.status_code <= 599
+
+    @property
+    def has_redirect_location(self) -> bool:
+        return (
+            self.status_code in (301, 302, 303, 307, 308)
+            and "location" in self._response["headers"]
+        )
+
+    async def cancel(self) -> None:
+        await self._rpc.call("abort", {"abortId": self._response["abortId"]})
+
+    def __repr__(self) -> str:
+        return f"<Response [{self.status_code}]>"
+
+
+class FetchResponse(AsyncFetchResponse):
+    def __init__(self, rpc: AsyncRpcClient, async_res: AsyncFetchResponse):
+        self._rpc = rpc
+        self._async = async_res
+
+    def raise_for_status(self) -> HTTPStatusError | None:
+        return self._async.raise_for_status()
+
+    @property
+    def status_code(self) -> int:
+        return self._async.status_code
+
+    @property
+    def is_informational(self) -> int:
+        return self._async.is_informational
+
+    @property
+    def is_success(self) -> int:
+        return self._async.is_success
+
+    @property
+    def is_redirect(self) -> int:
+        return self._async.is_redirect
+
+    @property
+    def is_client_error(self) -> int:
+        return self._async.is_client_error
+
+    @property
+    def is_server_error(self) -> int:
+        return self._async.is_server_error
+
+    @property
+    def is_error(self) -> int:
+        return self._async.is_error
+
+    @property
+    def has_redirect_location(self) -> bool:
+        return self._async.has_redirect_location
+
+    def cancel(self) -> None:
+        self._rpc._bridge.run(self._async.cancel())
+
+    def __repr__(self) -> str:
+        return f"<Response [{self.status_code}]>"
