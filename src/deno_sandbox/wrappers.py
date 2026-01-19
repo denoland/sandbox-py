@@ -603,6 +603,10 @@ class FetchResponse(AsyncFetchResponse):
         return self._async.raise_for_status()
 
     @property
+    def headers(self) -> dict[str, str]:
+        return self._async.headers
+
+    @property
     def status_code(self) -> int:
         return self._async.status_code
 
