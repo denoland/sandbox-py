@@ -15,12 +15,16 @@ async def test_apps_create_async():
     app = await sdk.apps.create()
     assert app["id"] is not None
 
+    await sdk.apps.delete(app["id"])
+
 
 def test_apps_create_sync():
     sdk = DenoDeploy()
 
     app = sdk.apps.create()
     assert app["id"] is not None
+
+    sdk.apps.delete(app["id"])
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -35,6 +39,7 @@ async def test_apps_create_options_async():
     )
 
     assert app["slug"] == slug
+    await sdk.apps.delete(app["id"])
 
 
 def test_apps_create_options_sync():
@@ -48,6 +53,7 @@ def test_apps_create_options_sync():
     )
 
     assert app["slug"] == slug
+    sdk.apps.delete(app["id"])
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -64,6 +70,8 @@ async def test_apps_update_async():
     assert updated["updated_at"] != app["updated_at"]
     assert updated["created_at"] == app["created_at"]
 
+    await sdk.apps.delete(app["id"])
+
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_apps_update_sync():
@@ -78,6 +86,8 @@ async def test_apps_update_sync():
     assert updated["id"] == app["id"]
     assert updated["updated_at"] != app["updated_at"]
     assert updated["created_at"] == app["created_at"]
+
+    sdk.apps.delete(app["id"])
 
 
 @pytest.mark.asyncio(loop_scope="session")

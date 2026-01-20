@@ -1,28 +1,27 @@
-import asyncio
 import base64
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timedelta, timezone
 import json
-import sys
 from typing import (
     Any,
     AsyncIterator,
-    BinaryIO,
     NotRequired,
     Optional,
     TypedDict,
-    cast,
 )
 from typing_extensions import Literal
 
 from deno_sandbox.api_generated import (
-    AsyncSandboxDeno,
+    AsyncSandboxDeno as AsyncSandboxDenoGenerated,
     AsyncSandboxEnv,
     AsyncSandboxFs,
-    SandboxDeno,
+    SandboxDeno as SandboxDenoGenerated,
     SandboxEnv,
     SandboxFs,
 )
 from deno_sandbox.api_types_generated import (
+    DenoReplOptions,
+    DenoRunOptions,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
@@ -30,13 +29,24 @@ from deno_sandbox.api_types_generated import (
     SpawnOptions,
 )
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
+from deno_sandbox.console import AsyncConsoleClient, ConsoleClient, ExposeSSHResult
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.transport import (
     WebSocketTransport,
 )
-from deno_sandbox.utils import to_snake_case
-from deno_sandbox.wrappers import AbortSignal
+from deno_sandbox.utils import to_camel_case, to_snake_case
+from deno_sandbox.wrappers import (
+    AsyncChildProcess,
+    AsyncDenoProcess,
+    AsyncDenoRepl,
+    AsyncFetchResponse,
+    ChildProcess,
+    DenoProcess,
+    DenoRepl,
+    FetchResponse,
+    ProcessSpawnResult,
+    RemoteProcessOptions,
+)
 
 
 type Mode = Literal["connect", "create"]
@@ -55,16 +65,6 @@ class VolumeInfo(TypedDict):
     path: str
 
 
-class ChildProcessStatus(TypedDict):
-    """Whether the subprocess exited successfully, i.e. with a zero exit code."""
-
-    success: bool
-    """The exit code of the subprocess. Negative values indicate that the process was killed by a signal."""
-    code: int
-    """The signal that caused the process to exit, if any. If the process exited normally, this will be `null`."""
-    signal: AbortSignal | None
-
-
 class AppConfig(TypedDict):
     stop_at_ms: NotRequired[int | None]
     labels: NotRequired[dict[str, str] | None]
@@ -72,18 +72,6 @@ class AppConfig(TypedDict):
     volumes: NotRequired[list[VolumeInfo] | None]
     allow_net: NotRequired[list]
     secrets: NotRequired[dict[str, SecretConfig] | None]
-
-
-class ProcessSpawnResult(TypedDict):
-    pid: int
-    stdout_stream_id: int
-    stderr_stream_id: int
-
-
-class ProcessWaitResult(TypedDict):
-    success: bool
-    code: int
-    signal: AbortSignal | None
 
 
 class SandboxApi:
@@ -206,110 +194,6 @@ class AsyncSandboxApi:
         return await self._client.sandboxes_list(options)
 
 
-class RemoteProcessOptions(TypedDict):
-    stdout_inherit: bool
-    stderr_inherit: bool
-
-
-class AsyncChildProcess:
-    def __init__(
-        self,
-        pid: int,
-        stdout: asyncio.StreamReader,
-        stderr: asyncio.StreamReader,
-        wait_task: asyncio.Task,
-    ):
-        self.pid = pid
-        self.stdout = stdout
-        self.stderr = stderr
-        self._wait_task = wait_task
-        self.returncode = None
-
-    @classmethod
-    async def create(
-        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
-    ) -> AsyncChildProcess:
-        pid = res["pid"]
-
-        stdout = asyncio.StreamReader()
-        stderr = asyncio.StreamReader()
-
-        rpc._pending_processes[res["stdout_stream_id"]] = stdout
-        rpc._pending_processes[res["stderr_stream_id"]] = stderr
-
-        wait_task = rpc._loop.create_task(rpc.call("processWait", {"pid": pid}))
-
-        instance = cls(pid, stdout, stderr, wait_task)
-
-        if options.get("stdout_inherit"):
-            rpc._loop.create_task(instance._pipe_stream(stdout, sys.stdout.buffer))
-        if options.get("stderr_inherit"):
-            rpc._loop.create_task(instance._pipe_stream(stderr, sys.stderr.buffer))
-
-        return instance
-
-    @property
-    async def status(self) -> ChildProcessStatus:
-        raw = await self._wait_task
-        result = cast(ProcessWaitResult, raw)
-        return ChildProcessStatus(
-            success=result["success"], code=result["code"], signal=result["signal"]
-        )
-
-    async def _pipe_stream(self, reader: asyncio.StreamReader, writer: BinaryIO):
-        """Helper to pump data from the StreamReader to a local binary stream."""
-        try:
-            while not reader.at_eof():
-                data = await reader.read(1024)
-                if not data:
-                    break
-
-                writer.write(data)
-                writer.flush()
-        except Exception:
-            # Handle potential connection drops or closed pipes silently
-            pass
-
-
-class SyncStreamReader:
-    """Wraps asyncio.StreamReader to provide synchronous read methods."""
-
-    def __init__(self, bridge: AsyncBridge, reader: asyncio.StreamReader):
-        self._bridge = bridge
-        self._reader = reader
-
-    def read(self, n: int = -1) -> bytes:
-        return self._bridge.run(self._reader.read(n))
-
-    def readline(self) -> bytes:
-        return self._bridge.run(self._reader.readline())
-
-    def readexactly(self, n: int) -> bytes:
-        return self._bridge.run(self._reader.readexactly(n))
-
-
-class ChildProcess:
-    def __init__(
-        self,
-        rpc: RpcClient,
-        async_proc: AsyncChildProcess,
-    ):
-        self._rpc = rpc
-
-        self._async_proc = async_proc
-        self.stdout = SyncStreamReader(rpc._bridge, self._async_proc.stdout)
-        self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
-        self.returncode: int | None = None
-
-    @property
-    def pid(self) -> int:
-        return self._async_proc.pid
-
-    @property
-    def status(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async_proc.status)
-
-
 class VsCodeOptions(TypedDict):
     env: NotRequired[dict[str, str] | None]
     """Environment variables to pass to the VS Code instance."""
@@ -332,6 +216,82 @@ class VsCodeOptions(TypedDict):
 
     editor_settings: NotRequired[dict[str, Any] | None]
     """The value for the default settings.json that VSCode will use."""
+
+
+class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
+    async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
+        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
+
+        params = {
+            "stdout": "inherit",
+            "stderr": "inherit",
+        }
+
+        if options is not None:
+            for key, value in options.items():
+                if value is not None:
+                    params[to_snake_case(key)] = value
+
+        if "code" in params and "extension" not in params:
+            params["extension"] = "ts"
+
+        opts = RemoteProcessOptions(
+            stdout_inherit=params["stdout"] == "inherit",
+            stderr_inherit=params["stderr"] == "inherit",
+        )
+
+        if params["stdout"] == "inherit":
+            params["stdout"] = "piped"
+        if params["stderr"] == "inherit":
+            params["stderr"] = "piped"
+
+        result = await self._rpc.call("spawnDeno", params)
+
+        return await AsyncDenoProcess.create(result, self._rpc, opts)
+
+    async def eval(self, code: str) -> Any:
+        repl = await self.repl()
+        result = await repl.eval(code)
+        await repl.close()
+        return result
+
+    async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
+        params = {"stdout": "piped", "stderr": "piped"}
+
+        opts = RemoteProcessOptions(stdout_inherit=True, stderr_inherit=True)
+
+        if options is not None:
+            for key, value in options.items():
+                if value is not None:
+                    if key == "stdout" or key == "stderr":
+                        if value == "inherit":
+                            continue
+                        else:
+                            opts[f"{key}_inherit"] = False
+
+                    params[to_camel_case(key)] = value
+
+        result: ProcessSpawnResult = await self._rpc.call("spawnDenoRepl", params)
+
+        return await AsyncDenoRepl.create(result, self._rpc, opts)
+
+
+class SandboxDeno(SandboxDenoGenerated):
+    def __init__(self, client: ConsoleClient, rpc: RpcClient):
+        super().__init__(client, rpc)
+
+        self._async = AsyncSandboxDeno(self._client._async, rpc._async_client)
+
+    def run(self, options: DenoRunOptions) -> DenoProcess:
+        async_deno = self._client._bridge.run(self._async.run(options))
+        return DenoProcess(self._rpc, async_deno)
+
+    def eval(self, code: str) -> Any:
+        return self._client._bridge.run(self._async.eval(code))
+
+    def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
+        async_repl = self._client._bridge.run(self._async.repl(options))
+        return DenoRepl(self._rpc, async_repl)
 
 
 class AsyncSandbox:
@@ -379,24 +339,73 @@ class AsyncSandbox:
         result: ProcessSpawnResult = await self._rpc.call("spawn", params)
         return await AsyncChildProcess.create(result, self._rpc, opts)
 
-    # FIXME
-    async def fetch() -> Any:
-        pass
+    async def fetch(
+        self,
+        url: str,
+        method: Optional[str] = "GET",
+        headers: Optional[dict[str, str]] = None,
+        redirect: Literal["follow", "manual"] = None,
+    ) -> AsyncFetchResponse:
+        return await self._rpc.fetch(url, method, headers, redirect)
 
     async def close(self) -> None:
         await self._rpc.close()
 
     async def kill(self) -> None:
-        pass
+        await self._client._kill_sandbox(self.id)
 
-    async def extend_timeout(self, additional_s: int) -> None:
-        pass
+    async def extend_timeout(self, additional_s: int) -> datetime:
+        """Request to extend the timeout of the sandbox by the specified duration.
+        You can at max extend timeout of a sandbox by 30 minutes at once.
 
-    async def expose_http(self, portOrPid: int) -> str:
-        pass
+        Please note the extension is not guranteed to be the same as requested time.
+        You should rely on the returned Date value to know the exact extension time.
+        """
 
-    async def expose_ssh(self, portOrPid: int) -> str:
-        pass
+        now = datetime.now(timezone.utc)
+        future_time = now + timedelta(seconds=additional_s)
+        stop_at_ms = int(future_time.timestamp() * 1000)
+
+        return await self._client._extend_timeout(self.id, stop_at_ms)
+
+    async def expose_http(
+        self, port: Optional[int] = None, pid: Optional[int] = None
+    ) -> str:
+        """Publicly expose a HTTP service via a publicly routeable URL.
+
+        NOTE: when you call this API, the target HTTP service will be PUBLICLY
+        EXPOSED WITHOUT AUTHENTICATION. Anyone with knowledge of the public domain
+        will be able to send arbitrary requests to the exposed service.
+
+        An exposed service can either be a service listening on an arbitrary HTTP
+        port, or a JavaScript runtime that can handle HTTP requests.
+        """
+
+        if port is not None and pid is not None:
+            raise ValueError("Only one of port or pid can be specified")
+
+        params = {}
+        if port is not None:
+            params["port"] = port
+        if pid is not None:
+            params["pid"] = pid
+
+        domain = await self._client._expose_http(self.id, params)
+
+        params["domain"] = domain
+        await self._rpc.call("exposeHttp", params)
+
+        return f"https://{domain}"
+
+    async def expose_ssh(self) -> ExposeSSHResult:
+        """Expose an isolate over SSH, allowing access to the isolate's shell.
+
+        NOTE: The SSH connection is authenticated through the 'username' field. This field is populated
+        with a randomly generated, unique identifier. Anyone with knowledge of the 'username' can
+        connect to the isolate's shell without further authentication.
+        """
+
+        return await self._client._expose_ssh(self.id)
 
     async def expose_vscode(
         self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
@@ -433,9 +442,14 @@ class Sandbox:
         async_child = self._client._bridge.run(self._async.spawn(command, options))
         return ChildProcess(self._rpc, async_child)
 
-    # FIXME
-    def fetch() -> Any:
-        pass
+    def fetch(
+        self,
+        url: str,
+        method: Optional[str] = "GET",
+        headers: Optional[dict[str, str]] = None,
+        redirect: Literal["follow", "manual"] = None,
+    ) -> FetchResponse:
+        return self._rpc.fetch(url, method, headers, redirect, None)
 
     def close(self) -> None:
         self._client._bridge.run(self._async.close())
@@ -443,19 +457,44 @@ class Sandbox:
     def kill(self) -> None:
         self._client._bridge.run(self._async.kill())
 
-    def extend_timeout(self, additional_s: int) -> None:
-        self._client._bridge.run(self._async.extend_timeout(additional_s))
+    def extend_timeout(self, additional_s: int) -> datetime:
+        """Request to extend the timeout of the sandbox by the specified duration.
+        You can at max extend timeout of a sandbox by 30 minutes at once.
 
-    def expose_http(self, port_or_pid: int) -> str:
-        self._client._bridge.run(self._async.expose_http(port_or_pid))
+        Please note the extension is not guranteed to be the same as requested time.
+        You should rely on the returned Date value to know the exact extension time.
+        """
+        return self._client._bridge.run(self._async.extend_timeout(additional_s))
 
-    def expose_ssh(self, port_or_pid: int) -> str:
-        self._client._bridge.run(self._async.expose_ssh(port_or_pid))
+    def expose_http(self, port: Optional[int] = None, pid: Optional[int] = None) -> str:
+        """Publicly expose a HTTP service via a publicly routeable URL.
+
+        NOTE: when you call this API, the target HTTP service will be PUBLICLY
+        EXPOSED WITHOUT AUTHENTICATION. Anyone with knowledge of the public domain
+        will be able to send arbitrary requests to the exposed service.
+
+        An exposed service can either be a service listening on an arbitrary HTTP
+        port, or a JavaScript runtime that can handle HTTP requests.
+        """
+        self._client._bridge.run(self._async.expose_http(port=port, pid=pid))
+
+    def expose_ssh(self) -> ExposeSSHResult:
+        """Expose an isolate over SSH, allowing access to the isolate's shell.
+
+        NOTE: The SSH connection is authenticated through the 'username' field. This field is populated
+        with a randomly generated, unique identifier. Anyone with knowledge of the 'username' can
+        connect to the isolate's shell without further authentication.
+        """
+        return self._client._bridge.run(self._async.expose_ssh())
 
     def expose_vscode(
         self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
     ) -> VsCode:
-        pass
+        async_vscode = self._client._bridge.run(
+            self._async.expose_vscode(path, options)
+        )
+
+        return VsCode(self._rpc, async_vscode)
 
     def __enter__(self):
         return self
@@ -500,9 +539,9 @@ class AsyncVsCode:
 class VsCode:
     """Experimental! A VSCode instance running inside the sandbox."""
 
-    def __init__(self, rpc: RpcClient, url: str):
+    def __init__(self, rpc: RpcClient, async_vscode: AsyncVsCode):
         self._rpc = rpc
-        self.url = url
+        self._async = async_vscode
 
     @property
     def stdout(self):
@@ -520,7 +559,7 @@ class VsCode:
         pass
 
     async def kill(self) -> None:
-        pass
+        self._rpc._bridge.run(self._async.kill())
 
     async def __aenter__(self):
         return self

@@ -1,4 +1,5 @@
-from typing import Any, Literal, Optional, cast
+from datetime import datetime, timezone
+from typing import Any, Literal, Optional, TypedDict, cast
 import httpx
 
 from deno_sandbox.api_types_generated import (
@@ -22,6 +23,16 @@ from deno_sandbox.utils import convert_to_snake_case, parse_link_header
 class Revision(RevisionWithoutTimelines):
     timelines: list[Timeline]
     """The timelines associated with the revision."""
+
+
+class ExposeSSHResult(TypedDict):
+    hostname: str
+    username: str
+    port: int
+
+
+class ExposeHTTPResult(TypedDict):
+    domain: str
 
 
 class AsyncPaginatedList[T, O]:
@@ -123,7 +134,10 @@ class AsyncConsoleClient:
         return self._client
 
     async def _request(
-        self, method: Literal["POST", "GET"], url: httpx.URL, data: Optional[Any] = None
+        self,
+        method: Literal["POST", "GET", "PATCH", "PUT", "DELETE"],
+        url: httpx.URL,
+        data: Optional[Any] = None,
     ) -> httpx.Response:
         response = await self.client.request(
             method=method, url=url, json=data, timeout=10.0
@@ -135,13 +149,11 @@ class AsyncConsoleClient:
     async def post(self, path: str, data: any) -> dict:
         req_url = self._options["console_url"].join(path)
         response = await self._request("POST", req_url, data)
-        response.raise_for_status()
         return response.json()
 
     async def patch(self, path: str, data: any) -> dict:
         req_url = self._options["console_url"].join(path)
         response = await self._request("PATCH", req_url, data)
-        response.raise_for_status()
         return response.json()
 
     async def get(
@@ -153,7 +165,6 @@ class AsyncConsoleClient:
             req_url = req_url.copy_add_params(params)
 
         response = await self._request("GET", req_url)
-        response.raise_for_status()
         return response.json()
 
     async def get_or_none(
@@ -166,10 +177,10 @@ class AsyncConsoleClient:
                 return None
             raise
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str) -> httpx.Response:
         req_url = self._options["console_url"].join(path)
         response = await self._request("DELETE", req_url)
-        response.raise_for_status()
+        return response
 
     async def get_paginated[T](
         self, path: str, cursor: Optional[str], params: Optional[dict[str, Any]] = None
@@ -261,6 +272,36 @@ class AsyncConsoleClient:
         )
         return volumes
 
+    async def _kill_sandbox(self, sandbox_id: str) -> None:
+        await self.delete(f"/api/v3/sandboxes/{sandbox_id}")
+
+    async def _extend_timeout(self, sandbox_id: str, stop_at_ms: int) -> datetime:
+        url = self._options["sandbox_url"].join(f"/api/v3/sandbox/{sandbox_id}")
+
+        result = await self._request("PATCH", url, {"stop_at_ms": stop_at_ms})
+
+        data = result.json()
+
+        return datetime.fromtimestamp(data["stop_at_ms"] / 1000, tz=timezone.utc)
+
+    async def _expose_http(self, sandbox_id: str, params: dict[str, int]) -> str:
+        url = self._options["sandbox_url"].join(
+            f"/api/v3/sandbox/{sandbox_id}/expose/http"
+        )
+
+        result = await self._request("POST", url, params)
+
+        data = cast(ExposeHTTPResult, result.json())
+        return data["domain"]
+
+    async def _expose_ssh(self, sandbox_id: str) -> ExposeSSHResult:
+        url = self._options["sandbox_url"].join(
+            f"/api/v3/sandbox/{sandbox_id}/expose/ssh"
+        )
+        response = await self._request("POST", url, {})
+
+        return cast(ExposeSSHResult, response.json())
+
 
 class ConsoleClient:
     def __init__(self, options: InternalOptions, bridge: AsyncBridge):
@@ -341,6 +382,18 @@ class ConsoleClient:
             self._async._volumes_list(options)
         )
         return PaginatedList(self._bridge, paginated)
+
+    def _kill_sandbox(self, sandbox_id: str) -> None:
+        self._bridge.run(self._async._kill_sandbox(sandbox_id))
+
+    def _extend_timeout(self, sandbox_id: str, stop_at_ms: int) -> None:
+        self._bridge.run(self._async._extend_timeout(sandbox_id, stop_at_ms))
+
+    def _expose_http(self, sandbox_id: str, params: dict[str, int]) -> str:
+        return self._bridge.run(self._async._expose_http(sandbox_id, params))
+
+    def _expose_ssh(self, sandbox_id: str) -> ExposeSSHResult:
+        return self._bridge.run(self._async._expose_ssh(sandbox_id))
 
 
 __all__ = ["AsyncConsoleClient", "ConsoleClient"]

@@ -19,6 +19,21 @@ class UnknownRpcMethod(Exception):
     pass
 
 
+class ProcessAlreadyExited(Exception):
+    """Raised when trying to interact with a process that has already exited."""
+
+    pass
+
+
+class HTTPStatusError(Exception):
+    """Raised when an HTTP request returns a non-success status code."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        self.status_code = status_code
+        self.message = message
+        super().__init__(f"HTTP Status {status_code}: {message}")
+
+
 class ZodErrorRaw(TypedDict):
     expected: str
     code: str
