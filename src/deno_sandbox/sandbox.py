@@ -476,7 +476,7 @@ class Sandbox:
         An exposed service can either be a service listening on an arbitrary HTTP
         port, or a JavaScript runtime that can handle HTTP requests.
         """
-        self._client._bridge.run(self._async.expose_http(port=port, pid=pid))
+        return self._client._bridge.run(self._async.expose_http(port=port, pid=pid))
 
     def expose_ssh(self) -> ExposeSSHResult:
         """Expose an isolate over SSH, allowing access to the isolate's shell.
