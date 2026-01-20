@@ -1,4 +1,3 @@
-from typing import Any
 from websockets import ClientConnection, ConnectionClosed, connect
 from httpx import URL
 
