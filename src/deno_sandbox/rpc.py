@@ -4,16 +4,16 @@ import json
 from typing import Any, Dict, Literal, Mapping, NotRequired, Optional, TypedDict, cast
 from websockets import ConnectionClosed
 
-from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.errors import (
+from .bridge import AsyncBridge
+from .errors import (
     HTTPStatusError,
     ProcessAlreadyExited,
     RpcValidationError,
     UnknownRpcMethod,
     ZodErrorRaw,
 )
-from deno_sandbox.transport import WebSocketTransport
-from deno_sandbox.utils import (
+from .transport import WebSocketTransport
+from .utils import (
     convert_to_camel_case,
     convert_to_snake_case,
     to_snake_case,

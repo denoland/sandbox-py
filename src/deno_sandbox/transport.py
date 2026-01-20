@@ -1,7 +1,7 @@
 from websockets import ClientConnection, ConnectionClosed, connect
 from httpx import URL
 
-from deno_sandbox.errors import AuthenticationError
+from .errors import AuthenticationError
 
 
 class WebSocketTransport:

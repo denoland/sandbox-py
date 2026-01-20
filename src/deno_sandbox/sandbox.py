@@ -12,13 +12,13 @@ from typing import (
 )
 from typing_extensions import Literal
 
-from deno_sandbox.api_generated import (
+from .api_generated import (
     AsyncSandboxEnv,
     AsyncSandboxFs,
     SandboxEnv,
     SandboxFs,
 )
-from deno_sandbox.api_types_generated import (
+from .api_types_generated import (
     DenoReplOptions,
     DenoRunOptions,
     SandboxListOptions,
@@ -27,20 +27,20 @@ from deno_sandbox.api_types_generated import (
     SandboxMeta,
     SpawnOptions,
 )
-from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.console import (
+from .bridge import AsyncBridge
+from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
     ConsoleClient,
     ExposeSSHResult,
     PaginatedList,
 )
-from deno_sandbox.rpc import AsyncRpcClient, RpcClient
-from deno_sandbox.transport import (
+from .rpc import AsyncRpcClient, RpcClient
+from .transport import (
     WebSocketTransport,
 )
-from deno_sandbox.utils import to_camel_case, to_snake_case
-from deno_sandbox.wrappers import (
+from .utils import to_camel_case, to_snake_case
+from .wrappers import (
     AsyncChildProcess,
     AsyncDenoProcess,
     AsyncDenoRepl,

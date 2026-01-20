@@ -4,7 +4,7 @@ from typing import NotRequired, Optional, TypedDict
 
 from httpx import URL
 
-from deno_sandbox.errors import MissingApiToken
+from .errors import MissingApiToken
 
 
 class Options(TypedDict):

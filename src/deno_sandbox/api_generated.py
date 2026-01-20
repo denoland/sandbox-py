@@ -2,7 +2,7 @@
 
 from typing import cast
 from typing_extensions import Optional
-from deno_sandbox.api_types_generated import (
+from .api_types_generated import (
     App,
     AppListOptions,
     AppInit,
@@ -33,15 +33,15 @@ from deno_sandbox.api_types_generated import (
     SymlinkOptions,
 )
 
-from deno_sandbox.rpc import RpcClient, AsyncRpcClient
-from deno_sandbox.utils import convert_to_camel_case, convert_to_snake_case
-from deno_sandbox.console import (
+from .rpc import RpcClient, AsyncRpcClient
+from .utils import convert_to_camel_case, convert_to_snake_case
+from .console import (
     AsyncConsoleClient,
     ConsoleClient,
     AsyncPaginatedList,
     PaginatedList,
 )
-from deno_sandbox.wrappers import (
+from .wrappers import (
     FsFile,
     AsyncFsFile,
 )
