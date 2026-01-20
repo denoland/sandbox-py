@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from typing import Any, BinaryIO, Optional, TypedDict, cast
+from typing import Any, BinaryIO, Callable, Optional, TypedDict, cast
 from typing_extensions import Literal
 from deno_sandbox.bridge import AsyncBridge
 from deno_sandbox.errors import ProcessAlreadyExited
@@ -49,20 +49,20 @@ class AsyncFsFile:
         """Write data to the file. Returns number of bytes written."""
 
         result = await self._rpc.call(
-            "fileWrite", {"data": data, "fileHandleId": self.fd}
+            "fileWrite", {"data": data, "fileHandleId": self._fd}
         )
         return result["bytesWritten"]
 
     async def truncate(self, size: Optional[int]) -> None:
         """Truncate the file to the given size. If size is None, truncate to 0."""
 
-        await self._rpc.call("fileTruncate", {"size": size, "fileHandleId": self.fd})
+        await self._rpc.call("fileTruncate", {"size": size, "fileHandleId": self._fd})
 
     async def read(self, size: int) -> bytes:
         """Read up to size bytes from the file. Returns the data read."""
 
         result = await self._rpc.call(
-            "fileRead", {"length": size, "fileHandleId": self.fd}
+            "fileRead", {"length": size, "fileHandleId": self._fd}
         )
         return result
 
@@ -70,50 +70,50 @@ class AsyncFsFile:
         """Seek to a position in the file. Returns the new position."""
 
         result = await self._rpc.call(
-            "fileSeek", {"offset": offset, "whence": whence, "fileHandleId": self.fd}
+            "fileSeek", {"offset": offset, "whence": whence, "fileHandleId": self._fd}
         )
         return result["position"]
 
     async def stat(self) -> FileInfo:
         """Get file information."""
 
-        result = await self._rpc.call("fileStat", {"fileHandleId": self.fd})
+        result = await self._rpc.call("fileStat", {"fileHandleId": self._fd})
         return cast(FileInfo, result)
 
     async def flush(self) -> None:
         """Flush the file's internal buffer."""
 
-        await self._rpc.call("fileFlush", {"fileHandleId": self.fd})
+        await self._rpc.call("fileFlush", {"fileHandleId": self._fd})
 
     async def syncData(self) -> None:
         """Sync the file's data to disk."""
 
-        await self._rpc.call("fileSyncData", {"fileHandleId": self.fd})
+        await self._rpc.call("fileSyncData", {"fileHandleId": self._fd})
 
     async def utime(self, atime: float, mtime: float) -> None:
         """Update the file's access and modification times."""
 
         await self._rpc.call(
             "fileUtime",
-            {"atime": atime, "mtime": mtime, "fileHandleId": self.fd},
+            {"atime": atime, "mtime": mtime, "fileHandleId": self._fd},
         )
 
     async def lock(self, exclusive: Optional[bool]) -> None:
         """Lock the file. If exclusive is True, acquire an exclusive lock."""
 
         await self._rpc.call(
-            "fileLock", {"exclusive": exclusive, "fileHandleId": self.fd}
+            "fileLock", {"exclusive": exclusive, "fileHandleId": self._fd}
         )
 
     async def unlock(self) -> None:
         """Unlock the file."""
 
-        await self._rpc.call("fileUnlock", {"fileHandleId": self.fd})
+        await self._rpc.call("fileUnlock", {"fileHandleId": self._fd})
 
     async def close(self) -> None:
         """Close the file."""
 
-        await self._rpc.call("fileClose", {"fileHandleId": self.fd})
+        await self._rpc.call("fileClose", {"fileHandleId": self._fd})
 
     async def __aenter__(self):
         return self
@@ -125,65 +125,64 @@ class AsyncFsFile:
 class FsFile:
     def __init__(self, rpc: RpcClient, fd: int):
         self._rpc = rpc
-        self._fd = fd
         self._async = AsyncFsFile(rpc._async_client, fd)
 
     def write(self, data: bytes) -> int:
         """Write data to the file. Returns number of bytes written."""
 
-        return self._bridge.run(self._async.write(data))
+        return self._rpc._bridge.run(self._async.write(data))
 
-    async def truncate(self, size: Optional[int]) -> None:
+    def truncate(self, size: Optional[int]) -> None:
         """Truncate the file to the given size. If size is None, truncate to 0."""
 
-        return self._bridge.run(self._async.truncate(size))
+        return self._rpc._bridge.run(self._async.truncate(size))
 
-    async def read(self, size: int) -> bytes:
+    def read(self, size: int) -> bytes:
         """Read up to size bytes from the file. Returns the data read."""
 
-        return self._bridge.run(self._async.read(size))
+        return self._rpc._bridge.run(self._async.read(size))
 
-    async def seek(self, offset: int, whence: int) -> int:
+    def seek(self, offset: int, whence: int) -> int:
         """Seek to a position in the file. Returns the new position."""
 
-        return self._bridge.run(self._async.seek(offset, whence))
+        return self._rpc._bridge.run(self._async.seek(offset, whence))
 
-    async def stat(self) -> FileInfo:
+    def stat(self) -> FileInfo:
         """Get file information."""
 
-        return self._bridge.run(self._async.stat())
+        return self._rpc._bridge.run(self._async.stat())
 
-    async def flush(self) -> None:
+    def flush(self) -> None:
         """Flush the file's internal buffer."""
 
-        return self._bridge.run(self._async.flush())
+        return self._rpc._bridge.run(self._async.flush())
 
-    async def syncData(self) -> None:
+    def syncData(self) -> None:
         """Sync the file's data to disk."""
 
-        return self._bridge.run(self._async.syncData())
+        return self._rpc._bridge.run(self._async.syncData())
 
-    async def utime(self, atime: float, mtime: float) -> None:
+    def utime(self, atime: int, mtime: int) -> None:
         """Update the file's access and modification times."""
 
-        return self._bridge.run(self._async.seek(atime, mtime))
+        return self._rpc._bridge.run(self._async.utime(atime, mtime))
 
-    async def lock(self, exclusive: Optional[bool]) -> None:
+    def lock(self, exclusive: Optional[bool]) -> None:
         """Lock the file. If exclusive is True, acquire an exclusive lock."""
 
-        return self._bridge.run(self._async.lock(exclusive))
+        return self._rpc._bridge.run(self._async.lock(exclusive))
 
-    async def unlock(self) -> None:
+    def unlock(self) -> None:
         """Unlock the file."""
 
-        return self._bridge.run(self._async.unlock())
+        return self._rpc._bridge.run(self._async.unlock())
 
-    async def close(self) -> None:
+    def close(self) -> None:
         """Close the file."""
 
-        return self._bridge.run(self._async.close())
+        return self._rpc._bridge.run(self._async.close())
 
-    async def __enter__(self):
+    def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -225,6 +224,8 @@ class AsyncChildProcess:
         stderr: asyncio.StreamReader,
         wait_task: asyncio.Task,
         rpc: AsyncRpcClient,
+        _stdout_task: Optional[asyncio.Task] = None,
+        _stderr_task: Optional[asyncio.Task] = None,
     ):
         self.pid = pid
         self.stdout = stdout
@@ -232,12 +233,15 @@ class AsyncChildProcess:
         self._wait_task = wait_task
         self.returncode = None
         self._rpc = rpc
-        self._stdout_task: Optional[asyncio.Task] = None
+        self._stdout_task = _stdout_task
         self._stderr_task: Optional[asyncio.Task] = None
 
     @classmethod
     async def create(
-        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+        cls: type["AsyncChildProcess"],
+        res: ProcessSpawnResult,
+        rpc: AsyncRpcClient,
+        options: RemoteProcessOptions,
     ) -> AsyncChildProcess:
         return create_process_like(cls, res, rpc, options)
 
@@ -248,20 +252,6 @@ class AsyncChildProcess:
         return ChildProcessStatus(
             success=result["success"], code=result["code"], signal=result["signal"]
         )
-
-    async def _pipe_stream(self, reader: asyncio.StreamReader, writer: BinaryIO):
-        """Helper to pump data from the StreamReader to a local binary stream."""
-        try:
-            while not reader.at_eof():
-                data = await reader.read(1024)
-                if not data:
-                    break
-
-                writer.write(data)
-                writer.flush()
-        except Exception:
-            # Handle potential connection drops or closed pipes silently
-            pass
 
     async def kill(self) -> None:
         """Kill the process."""
@@ -279,8 +269,37 @@ class AsyncChildProcess:
         await self.kill()
 
 
+async def _pipe_stream(reader: asyncio.StreamReader, writer: BinaryIO):
+    """Helper to pump data from the StreamReader to a local binary stream."""
+    try:
+        while not reader.at_eof():
+            data = await reader.read(1024)
+            if not data:
+                break
+
+            writer.write(data)
+            writer.flush()
+    except Exception:
+        # Handle potential connection drops or closed pipes silently
+        pass
+
+
 def create_process_like[T](
-    cls: T, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+    cls: Callable[
+        [
+            int,
+            asyncio.StreamReader,
+            asyncio.StreamReader,
+            asyncio.Task,
+            AsyncRpcClient,
+            Optional[asyncio.Task],
+            Optional[asyncio.Task],
+        ],
+        T,
+    ],
+    res: ProcessSpawnResult,
+    rpc: AsyncRpcClient,
+    options: RemoteProcessOptions,
 ) -> T:
     pid = res["pid"]
 
@@ -292,16 +311,17 @@ def create_process_like[T](
 
     wait_task = rpc._loop.create_task(rpc.call("processWait", {"pid": pid}))
 
-    instance = cls(pid, stdout, stderr, wait_task, rpc)
+    stdout_task: Optional[asyncio.Task] = None
+    stderr_task: Optional[asyncio.Task] = None
 
     if options.get("stdout_inherit"):
-        instance._stdout_task = rpc._loop.create_task(
-            instance._pipe_stream(stdout, sys.stdout.buffer)
-        )
+        stdout_coro = _pipe_stream(stdout, sys.stdout.buffer)
+        stdout_task = rpc._loop.create_task(stdout_coro)
     if options.get("stderr_inherit"):
-        instance._stderr_task = rpc._loop.create_task(
-            instance._pipe_stream(stderr, sys.stderr.buffer)
-        )
+        stderr_coro = _pipe_stream(stderr, sys.stderr.buffer)
+        stderr_task = rpc._loop.create_task(stderr_coro)
+
+    instance = cls(pid, stdout, stderr, wait_task, rpc, stdout_task, stderr_task)
 
     return instance
 
@@ -352,13 +372,25 @@ class ChildProcess:
 
 
 class AsyncDenoProcess(AsyncChildProcess):
-    def __init__(self, pid, stdout, stderr, wait_task, rpc):
-        super().__init__(pid, stdout, stderr, wait_task, rpc)
+    def __init__(
+        self,
+        pid: int,
+        stdout: asyncio.StreamReader,
+        stderr: asyncio.StreamReader,
+        wait_task: asyncio.Task,
+        rpc: AsyncRpcClient,
+        stdout_task: Optional[asyncio.Task],
+        stderr_task: Optional[asyncio.Task],
+    ):
+        super().__init__(pid, stdout, stderr, wait_task, rpc, stdout_task, stderr_task)
         self._listening_task: asyncio.Task | None = None
 
     @classmethod
     async def create(
-        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+        cls: type["AsyncDenoProcess"],
+        res: ProcessSpawnResult,
+        rpc: AsyncRpcClient,
+        options: RemoteProcessOptions,
     ) -> AsyncDenoProcess:
         p = create_process_like(cls, res, rpc, options)
 
@@ -380,7 +412,7 @@ class AsyncDenoProcess(AsyncChildProcess):
         url: str,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
-        redirect: Literal["follow", "manual"] = None,
+        redirect: Optional[Literal["follow", "manual"]] = None,
     ) -> AsyncFetchResponse:
         """Fetch a URL from the Deno process."""
         return await self._rpc.fetch(url, method, headers, redirect, self.pid)
@@ -395,21 +427,22 @@ class DenoProcess(ChildProcess):
     def __init__(
         self,
         rpc: RpcClient,
-        async_proc: AsyncChildProcess,
+        async_proc: AsyncDenoProcess,
     ):
         super().__init__(rpc, async_proc)
+        self._async = async_proc
 
     def wait_http_ready(self) -> bool:
         """Whether the Deno process is ready to accept HTTP requests."""
 
-        return self._rpc._bridge.run(self._async_proc.wait_http_ready())
+        return self._rpc._bridge.run(self._async.wait_http_ready())
 
     def fetch(
         self,
         url: str,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
-        redirect: Literal["follow", "manual"] = None,
+        redirect: Optional[Literal["follow", "manual"]] = None,
     ) -> FetchResponse:
         """Fetch a URL from the Deno process."""
 
@@ -419,7 +452,10 @@ class DenoProcess(ChildProcess):
 class AsyncDenoRepl(AsyncChildProcess):
     @classmethod
     async def create(
-        cls, res: ProcessSpawnResult, rpc: AsyncRpcClient, options: RemoteProcessOptions
+        cls: type["AsyncDenoRepl"],
+        res: ProcessSpawnResult,
+        rpc: AsyncRpcClient,
+        options: RemoteProcessOptions,
     ) -> AsyncDenoRepl:
         return create_process_like(cls, res, rpc, options)
 
@@ -444,8 +480,10 @@ class AsyncDenoRepl(AsyncChildProcess):
 
         await self._rpc.call("denoReplClose", {"pid": self.pid})
         self._wait_task.cancel()
-        self._stdout_task.cancel()
-        self._stderr_task.cancel()
+        if self._stdout_task is not None:
+            self._stdout_task.cancel()
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()

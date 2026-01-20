@@ -16,7 +16,12 @@ async def test_volume_create_root_async():
 
     slug = gen_volume_name()
     volume = await sdk.volumes.create(
-        {"capacity": "10GB", "region": "ord", "slug": slug, "from": "builtin:debian-13"}
+        {
+            "capacity": "10GB",
+            "region": "ord",
+            "slug": slug,
+            "from_snapshot": "builtin:debian-13",
+        }
     )
 
     expected: Volume = {

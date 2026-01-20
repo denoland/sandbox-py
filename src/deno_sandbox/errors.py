@@ -40,10 +40,6 @@ class ZodErrorRaw(TypedDict):
     path: list[str]
     message: str
 
-    def __init__(self, zod_error: dict[str, Any]) -> None:
-        self.zod_error = zod_error
-        super().__init__("Zod Validation Error")
-
 
 class RpcValidationError(ValueError):
     """Raised when there is a validation error in RPC parameters."""

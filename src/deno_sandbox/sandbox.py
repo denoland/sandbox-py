@@ -8,14 +8,13 @@ from typing import (
     NotRequired,
     Optional,
     TypedDict,
+    cast,
 )
 from typing_extensions import Literal
 
 from deno_sandbox.api_generated import (
-    AsyncSandboxDeno as AsyncSandboxDenoGenerated,
     AsyncSandboxEnv,
     AsyncSandboxFs,
-    SandboxDeno as SandboxDenoGenerated,
     SandboxEnv,
     SandboxFs,
 )
@@ -29,7 +28,13 @@ from deno_sandbox.api_types_generated import (
     SpawnOptions,
 )
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.console import AsyncConsoleClient, ConsoleClient, ExposeSSHResult
+from deno_sandbox.console import (
+    AsyncConsoleClient,
+    AsyncPaginatedList,
+    ConsoleClient,
+    ExposeSSHResult,
+    PaginatedList,
+)
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.transport import (
     WebSocketTransport,
@@ -65,12 +70,17 @@ class VolumeInfo(TypedDict):
     path: str
 
 
+class AppConfigVolume(TypedDict):
+    volume: str
+
+
 class AppConfig(TypedDict):
     stop_at_ms: NotRequired[int | None]
     labels: NotRequired[dict[str, str] | None]
     memory_mb: NotRequired[int | None]
     volumes: NotRequired[list[VolumeInfo] | None]
-    allow_net: NotRequired[list]
+    allow_net: NotRequired[list[str] | None]
+    root: NotRequired[AppConfigVolume | None]
     secrets: NotRequired[dict[str, SecretConfig] | None]
 
 
@@ -114,8 +124,10 @@ class SandboxApi:
         finally:
             self._bridge.run(async_cm.__aexit__(None, None, None))
 
-    def list(self, options: SandboxListOptions) -> list[SandboxMeta]:
-        return self._client.sandboxes_list(options)
+    def list(
+        self, options: SandboxListOptions
+    ) -> PaginatedList[SandboxMeta, SandboxListOptions]:
+        return self._client._sandboxes_list(options)
 
 
 class AsyncSandboxApi:
@@ -131,8 +143,9 @@ class AsyncSandboxApi:
     ) -> AsyncIterator[AsyncSandbox]:
         """Creates a new sandbox instance."""
 
-        app_config: AppConfig = {
+        config_dict: dict[str, Any] = {
             "memory_mb": 1280,
+            "debug": options.get("debug", False) if options else False,
         }
 
         # Ensure null values are not included
@@ -140,9 +153,11 @@ class AsyncSandboxApi:
             for k, v in options.items():
                 if v is not None:
                     if k == "root":
-                        app_config["root"] = {"volume": v}
+                        config_dict["root"] = {"volume": v}
                     else:
-                        app_config[k] = v
+                        config_dict[k] = v
+
+        app_config = cast(AppConfig, config_dict)
 
         json_config = json.dumps(app_config, separators=(",", ":")).encode("utf-8")
 
@@ -150,7 +165,7 @@ class AsyncSandboxApi:
         token = self._client._options["token"]
 
         transport = WebSocketTransport()
-        await transport.connect(
+        ws = await transport.connect(
             url=url,
             headers={
                 "Authorization": f"Bearer {token}",
@@ -158,7 +173,16 @@ class AsyncSandboxApi:
             },
         )
 
-        sandbox_id = transport._ws.response.headers.get("x-deno-sandbox-id")
+        response = ws.response
+        if response is None:
+            raise Exception("No response received")
+
+        if response.headers is None:
+            raise Exception("No response headers received")
+
+        sandbox_id = response.headers.get("x-deno-sandbox-id")
+        if sandbox_id is None:
+            raise Exception("Sandbox ID not found in response headers")
 
         try:
             rpc = AsyncRpcClient(transport)
@@ -167,8 +191,12 @@ class AsyncSandboxApi:
             await transport.close()
 
     @asynccontextmanager
-    async def connect(self, sandbox_id: str) -> AsyncIterator[AsyncSandbox]:
+    async def connect(
+        self, options: SandboxConnectOptions
+    ) -> AsyncIterator[AsyncSandbox]:
         """Connects to an existing sandbox instance."""
+
+        sandbox_id = options["id"]
 
         url = self._client._options["sandbox_ws_url"].join(
             f"/api/v3/sandbox/{sandbox_id}/connect"
@@ -190,8 +218,8 @@ class AsyncSandboxApi:
 
     async def list(
         self, options: Optional[SandboxListOptions] = None
-    ) -> list[SandboxMeta]:
-        return await self._client.sandboxes_list(options)
+    ) -> AsyncPaginatedList[SandboxMeta, SandboxListOptions]:
+        return await self._client._sandboxes_list(options)
 
 
 class VsCodeOptions(TypedDict):
@@ -218,7 +246,11 @@ class VsCodeOptions(TypedDict):
     """The value for the default settings.json that VSCode will use."""
 
 
-class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
+class AsyncSandboxDeno:
+    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
+        self._client = client
+        self._rpc = rpc
+
     async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
         """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
 
@@ -255,6 +287,8 @@ class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
         await repl.close()
         return result
 
+    # TODO: Support deploy method
+
     async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
         params = {"stdout": "piped", "stderr": "piped"}
 
@@ -263,11 +297,10 @@ class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
         if options is not None:
             for key, value in options.items():
                 if value is not None:
-                    if key == "stdout" or key == "stderr":
-                        if value == "inherit":
-                            continue
-                        else:
-                            opts[f"{key}_inherit"] = False
+                    if key == "stdout" and value != "inherit":
+                        opts["stdout_inherit"] = False
+                    if key == "stderr" and value != "inherit":
+                        opts["stderr_inherit"] = False
 
                     params[to_camel_case(key)] = value
 
@@ -276,13 +309,17 @@ class AsyncSandboxDeno(AsyncSandboxDenoGenerated):
         return await AsyncDenoRepl.create(result, self._rpc, opts)
 
 
-class SandboxDeno(SandboxDenoGenerated):
+class SandboxDeno:
     def __init__(self, client: ConsoleClient, rpc: RpcClient):
-        super().__init__(client, rpc)
+        self._client = client
+        self._rpc = rpc
 
         self._async = AsyncSandboxDeno(self._client._async, rpc._async_client)
 
     def run(self, options: DenoRunOptions) -> DenoProcess:
+        """
+        Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit.
+        """
         async_deno = self._client._bridge.run(self._async.run(options))
         return DenoProcess(self._rpc, async_deno)
 
@@ -344,7 +381,7 @@ class AsyncSandbox:
         url: str,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
-        redirect: Literal["follow", "manual"] = None,
+        redirect: Optional[Literal["follow", "manual"]] = None,
     ) -> AsyncFetchResponse:
         return await self._rpc.fetch(url, method, headers, redirect)
 
@@ -407,11 +444,6 @@ class AsyncSandbox:
 
         return await self._client._expose_ssh(self.id)
 
-    async def expose_vscode(
-        self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
-    ) -> AsyncVsCode:
-        pass
-
     async def __aenter__(self):
         return self
 
@@ -447,7 +479,7 @@ class Sandbox:
         url: str,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
-        redirect: Literal["follow", "manual"] = None,
+        redirect: Optional[Literal["follow", "manual"]] = None,
     ) -> FetchResponse:
         return self._rpc.fetch(url, method, headers, redirect, None)
 
@@ -486,15 +518,6 @@ class Sandbox:
         connect to the isolate's shell without further authentication.
         """
         return self._client._bridge.run(self._async.expose_ssh())
-
-    def expose_vscode(
-        self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
-    ) -> VsCode:
-        async_vscode = self._client._bridge.run(
-            self._async.expose_vscode(path, options)
-        )
-
-        return VsCode(self._rpc, async_vscode)
 
     def __enter__(self):
         return self
