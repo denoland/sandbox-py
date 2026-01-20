@@ -39,7 +39,7 @@ async def test_volume_create_root_async():
     async with sdk.sandbox.create({"root": volume["slug"], "region": "ord"}) as sb:
         await sb.fs.write_text_file("/app/foo.txt", "foo")
         cp = await sb.spawn("sync")
-        await cp.status
+        await cp.wait()
 
     await asyncio.sleep(1)
 

@@ -543,8 +543,7 @@ class AsyncVsCode:
         # FIXME
         pass
 
-    @property
-    def status(self):
+    def wait(self):
         # FIXME
         pass
 
@@ -556,7 +555,7 @@ class AsyncVsCode:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.kill()
-        await self.status
+        await self.wait()
 
 
 class VsCode:
@@ -576,8 +575,7 @@ class VsCode:
         # FIXME
         pass
 
-    @property
-    def status(self):
+    def wait(self):
         # FIXME
         pass
 
@@ -589,4 +587,4 @@ class VsCode:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.kill()
-        await self.status
+        await self.wait()
