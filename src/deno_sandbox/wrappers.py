@@ -245,8 +245,7 @@ class AsyncChildProcess:
     ) -> AsyncChildProcess:
         return create_process_like(cls, res, rpc, options)
 
-    @property
-    async def status(self) -> ChildProcessStatus:
+    async def wait(self) -> ChildProcessStatus:
         raw = await self._wait_task
         result = cast(ProcessWaitResult, raw)
         return ChildProcessStatus(
@@ -360,9 +359,8 @@ class ChildProcess:
     def pid(self) -> int:
         return self._async_proc.pid
 
-    @property
-    def status(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async_proc.status)
+    def wait(self) -> ChildProcessStatus:
+        return self._rpc._bridge.run(self._async_proc.wait())
 
     def __enter__(self):
         return self
@@ -524,9 +522,8 @@ class DenoRepl:
     def pid(self) -> int:
         return self._async.pid
 
-    @property
-    def status(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async.status)
+    def wait(self) -> ChildProcessStatus:
+        return self._rpc._bridge.run(self._async.wait())
 
     def __enter__(self):
         return self

@@ -82,7 +82,7 @@ async def test_spawn_async(async_shared_sandbox) -> None:
         },
     )
 
-    status = await p.status
+    status = await p.wait()
     assert status["code"] == 0
 
     stdout = await p.stdout.read(-1)
@@ -103,7 +103,7 @@ async def test_spawn_sync(shared_sandbox) -> None:
         },
     )
 
-    status = p.status
+    status = p.wait()
     assert status["code"] == 0
 
     stdout = p.stdout.read(-1)

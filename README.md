@@ -31,7 +31,7 @@ def main()
       ]
     })
 
-    await p.status
+    await p.wait()
 
 if __name__ == "__main__"
   main()
@@ -53,7 +53,7 @@ async def main()
       ]
     })
 
-    await p.status
+    await p.wait()
 
 if __name__ == "__main__"
   asyncio.run(main())
