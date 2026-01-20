@@ -234,7 +234,7 @@ class AsyncChildProcess:
         self.returncode = None
         self._rpc = rpc
         self._stdout_task = _stdout_task
-        self._stderr_task: Optional[asyncio.Task] = None
+        self._stderr_task = _stderr_task
 
     @classmethod
     async def create(
@@ -253,13 +253,20 @@ class AsyncChildProcess:
         )
 
     async def kill(self) -> None:
-        """Kill the process."""
+        """Kill the process and cancel all associated tasks."""
 
         try:
             await self._rpc.call("processKill", {"pid": self.pid})
         except ProcessAlreadyExited:
             # Process already exited
             pass
+
+        # Cancel all associated tasks
+        self._wait_task.cancel()
+        if self._stdout_task is not None:
+            self._stdout_task.cancel()
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
 
     async def __aenter__(self):
         return self
@@ -396,6 +403,12 @@ class AsyncDenoProcess(AsyncChildProcess):
             rpc.call("denoHttpWait", {"pid": p.pid})
         )
         return p
+
+    async def kill(self) -> None:
+        """Kill the process and cancel all associated tasks."""
+        if self._listening_task is not None:
+            self._listening_task.cancel()
+        await super().kill()
 
     async def wait_http_ready(self) -> bool:
         """Whether the Deno process is ready to accept HTTP requests."""

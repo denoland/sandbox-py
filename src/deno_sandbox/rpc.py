@@ -145,7 +145,11 @@ class AsyncRpcClient:
                             del self._pending_processes[stream_id]
 
         except ConnectionClosed:
-            pass
+            # Cancel all pending requests when connection closes
+            for future in self._pending_requests.values():
+                if not future.done():
+                    future.cancel()
+            self._pending_requests.clear()
         except Exception as e:
             for future in self._pending_requests.values():
                 if not future.done():
