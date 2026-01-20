@@ -2,9 +2,9 @@ import asyncio
 import sys
 from typing import Any, BinaryIO, Callable, Optional, TypedDict, cast
 from typing_extensions import Literal
-from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.errors import ProcessAlreadyExited
-from deno_sandbox.rpc import (
+from .bridge import AsyncBridge
+from .errors import ProcessAlreadyExited
+from .rpc import (
     AsyncFetchResponse,
     AsyncRpcClient,
     FetchResponse,

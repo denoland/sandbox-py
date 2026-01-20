@@ -3,7 +3,7 @@
 
 from typing_extensions import TypedDict, NotRequired, Literal
 from re import Pattern
-from deno_sandbox.wrappers import AbortSignal
+from .wrappers import AbortSignal
 
 
 class App(TypedDict):

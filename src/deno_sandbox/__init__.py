@@ -1,5 +1,5 @@
 from typing import Optional
-from deno_sandbox.api_generated import (
+from .api_generated import (
     Apps,
     AsyncApps,
     AsyncRevisions,
@@ -11,13 +11,13 @@ from deno_sandbox.api_generated import (
     Timelines,
     Volumes,
 )
-from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.sandbox import (
+from .bridge import AsyncBridge
+from .sandbox import (
     AsyncSandboxApi,
     SandboxApi,
 )
-from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
-from deno_sandbox.options import Options, get_internal_options
+from .console import AsyncConsoleClient, ConsoleClient
+from .options import Options, get_internal_options
 
 __all__ = ["DenoDeploy", "AsyncDenoDeploy", "Options"]
 

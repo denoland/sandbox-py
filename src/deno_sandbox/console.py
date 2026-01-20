@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Optional, TypedDict, cast
 import httpx
 
-from deno_sandbox.api_types_generated import (
+from .api_types_generated import (
     App,
     AppInit,
     AppListOptions,
@@ -20,9 +20,9 @@ from deno_sandbox.api_types_generated import (
     VolumeInit,
     VolumeListOptions,
 )
-from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.options import InternalOptions
-from deno_sandbox.utils import convert_to_snake_case, parse_link_header
+from .bridge import AsyncBridge
+from .options import InternalOptions
+from .utils import convert_to_snake_case, parse_link_header
 
 
 class Revision(RevisionWithoutTimelines):
