@@ -83,5 +83,25 @@ async def test_deno_run_http_ready_async(async_shared_sandbox):
         res = await cp.fetch(url="https://example.com", method="GET")
 
         assert res.status_code == 200
-        assert res.headers["content-type"] == "text/plain; charset=utf-8"
-        print("fetch", res)
+
+        headers = dict(res.headers)
+        assert headers["content-type"] == "text/plain;charset=UTF-8"
+
+
+def test_deno_run_http_ready_sync(shared_sandbox):
+    sb = shared_sandbox
+
+    with sb.deno.run(
+        {
+            "code": "Deno.serve(req => new Response('ok'))",
+        }
+    ) as cp:
+        ready = cp.wait_http_ready()
+        assert ready is True
+
+        res = cp.fetch(url="https://example.com", method="GET")
+
+        assert res.status_code == 200
+
+        headers = dict(res.headers)
+        assert headers["content-type"] == "text/plain;charset=UTF-8"

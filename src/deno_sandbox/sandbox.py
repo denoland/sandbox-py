@@ -1,5 +1,6 @@
 import base64
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timedelta, timezone
 import json
 from typing import (
     Any,
@@ -28,7 +29,7 @@ from deno_sandbox.api_types_generated import (
     SpawnOptions,
 )
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.console import AsyncConsoleClient, ConsoleClient
+from deno_sandbox.console import AsyncConsoleClient, ConsoleClient, ExposeSSHResult
 from deno_sandbox.rpc import AsyncRpcClient, RpcClient
 from deno_sandbox.transport import (
     WebSocketTransport,
@@ -38,9 +39,11 @@ from deno_sandbox.wrappers import (
     AsyncChildProcess,
     AsyncDenoProcess,
     AsyncDenoRepl,
+    AsyncFetchResponse,
     ChildProcess,
     DenoProcess,
     DenoRepl,
+    FetchResponse,
     ProcessSpawnResult,
     RemoteProcessOptions,
 )
@@ -336,24 +339,73 @@ class AsyncSandbox:
         result: ProcessSpawnResult = await self._rpc.call("spawn", params)
         return await AsyncChildProcess.create(result, self._rpc, opts)
 
-    # FIXME
-    async def fetch() -> Any:
-        pass
+    async def fetch(
+        self,
+        url: str,
+        method: Optional[str] = "GET",
+        headers: Optional[dict[str, str]] = None,
+        redirect: Literal["follow", "manual"] = None,
+    ) -> AsyncFetchResponse:
+        return await self._rpc.fetch(url, method, headers, redirect)
 
     async def close(self) -> None:
         await self._rpc.close()
 
     async def kill(self) -> None:
-        pass
+        await self._client._kill_sandbox(self.id)
 
-    async def extend_timeout(self, additional_s: int) -> None:
-        pass
+    async def extend_timeout(self, additional_s: int) -> datetime:
+        """Request to extend the timeout of the sandbox by the specified duration.
+        You can at max extend timeout of a sandbox by 30 minutes at once.
 
-    async def expose_http(self, portOrPid: int) -> str:
-        pass
+        Please note the extension is not guranteed to be the same as requested time.
+        You should rely on the returned Date value to know the exact extension time.
+        """
 
-    async def expose_ssh(self, portOrPid: int) -> str:
-        pass
+        now = datetime.now(timezone.utc)
+        future_time = now + timedelta(seconds=additional_s)
+        stop_at_ms = int(future_time.timestamp() * 1000)
+
+        return await self._client._extend_timeout(self.id, stop_at_ms)
+
+    async def expose_http(
+        self, port: Optional[int] = None, pid: Optional[int] = None
+    ) -> str:
+        """Publicly expose a HTTP service via a publicly routeable URL.
+
+        NOTE: when you call this API, the target HTTP service will be PUBLICLY
+        EXPOSED WITHOUT AUTHENTICATION. Anyone with knowledge of the public domain
+        will be able to send arbitrary requests to the exposed service.
+
+        An exposed service can either be a service listening on an arbitrary HTTP
+        port, or a JavaScript runtime that can handle HTTP requests.
+        """
+
+        if port is not None and pid is not None:
+            raise ValueError("Only one of port or pid can be specified")
+
+        params = {}
+        if port is not None:
+            params["port"] = port
+        if pid is not None:
+            params["pid"] = pid
+
+        domain = await self._client._expose_http(self.id, params)
+
+        params["domain"] = domain
+        await self._rpc.call("exposeHttp", params)
+
+        return f"https://{domain}"
+
+    async def expose_ssh(self) -> ExposeSSHResult:
+        """Expose an isolate over SSH, allowing access to the isolate's shell.
+
+        NOTE: The SSH connection is authenticated through the 'username' field. This field is populated
+        with a randomly generated, unique identifier. Anyone with knowledge of the 'username' can
+        connect to the isolate's shell without further authentication.
+        """
+
+        return await self._client._expose_ssh(self.id)
 
     async def expose_vscode(
         self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
@@ -390,9 +442,14 @@ class Sandbox:
         async_child = self._client._bridge.run(self._async.spawn(command, options))
         return ChildProcess(self._rpc, async_child)
 
-    # FIXME
-    def fetch() -> Any:
-        pass
+    def fetch(
+        self,
+        url: str,
+        method: Optional[str] = "GET",
+        headers: Optional[dict[str, str]] = None,
+        redirect: Literal["follow", "manual"] = None,
+    ) -> FetchResponse:
+        return self._rpc.fetch(url, method, headers, redirect, None)
 
     def close(self) -> None:
         self._client._bridge.run(self._async.close())
@@ -400,19 +457,44 @@ class Sandbox:
     def kill(self) -> None:
         self._client._bridge.run(self._async.kill())
 
-    def extend_timeout(self, additional_s: int) -> None:
-        self._client._bridge.run(self._async.extend_timeout(additional_s))
+    def extend_timeout(self, additional_s: int) -> datetime:
+        """Request to extend the timeout of the sandbox by the specified duration.
+        You can at max extend timeout of a sandbox by 30 minutes at once.
 
-    def expose_http(self, port_or_pid: int) -> str:
-        self._client._bridge.run(self._async.expose_http(port_or_pid))
+        Please note the extension is not guranteed to be the same as requested time.
+        You should rely on the returned Date value to know the exact extension time.
+        """
+        return self._client._bridge.run(self._async.extend_timeout(additional_s))
 
-    def expose_ssh(self, port_or_pid: int) -> str:
-        self._client._bridge.run(self._async.expose_ssh(port_or_pid))
+    def expose_http(self, port: Optional[int] = None, pid: Optional[int] = None) -> str:
+        """Publicly expose a HTTP service via a publicly routeable URL.
+
+        NOTE: when you call this API, the target HTTP service will be PUBLICLY
+        EXPOSED WITHOUT AUTHENTICATION. Anyone with knowledge of the public domain
+        will be able to send arbitrary requests to the exposed service.
+
+        An exposed service can either be a service listening on an arbitrary HTTP
+        port, or a JavaScript runtime that can handle HTTP requests.
+        """
+        self._client._bridge.run(self._async.expose_http(port=port, pid=pid))
+
+    def expose_ssh(self) -> ExposeSSHResult:
+        """Expose an isolate over SSH, allowing access to the isolate's shell.
+
+        NOTE: The SSH connection is authenticated through the 'username' field. This field is populated
+        with a randomly generated, unique identifier. Anyone with knowledge of the 'username' can
+        connect to the isolate's shell without further authentication.
+        """
+        return self._client._bridge.run(self._async.expose_ssh())
 
     def expose_vscode(
         self, path: Optional[str] = None, options: Optional[VsCodeOptions] = None
     ) -> VsCode:
-        pass
+        async_vscode = self._client._bridge.run(
+            self._async.expose_vscode(path, options)
+        )
+
+        return VsCode(self._rpc, async_vscode)
 
     def __enter__(self):
         return self
@@ -457,9 +539,9 @@ class AsyncVsCode:
 class VsCode:
     """Experimental! A VSCode instance running inside the sandbox."""
 
-    def __init__(self, rpc: RpcClient, url: str):
+    def __init__(self, rpc: RpcClient, async_vscode: AsyncVsCode):
         self._rpc = rpc
-        self.url = url
+        self._async = async_vscode
 
     @property
     def stdout(self):
@@ -477,7 +559,7 @@ class VsCode:
         pass
 
     async def kill(self) -> None:
-        pass
+        self._rpc._bridge.run(self._async.kill())
 
     async def __aenter__(self):
         return self

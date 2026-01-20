@@ -14,6 +14,7 @@ class Options(TypedDict):
 
 class InternalOptions(TypedDict):
     sandbox_ws_url: URL
+    sandbox_url: URL
     console_url: URL
     token: str
     regions: list[str]
@@ -45,6 +46,7 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
     return InternalOptions(
         console_url=console_url,
         sandbox_ws_url=sandbox_ws_url,
+        sandbox_url=sandbox_url,
         token=token,
         regions=regions,
     )

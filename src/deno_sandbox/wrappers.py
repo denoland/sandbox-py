@@ -3,8 +3,13 @@ import sys
 from typing import Any, BinaryIO, Optional, TypedDict, cast
 from typing_extensions import Literal
 from deno_sandbox.bridge import AsyncBridge
-from deno_sandbox.errors import HTTPStatusError, ProcessAlreadyExited
-from deno_sandbox.rpc import AsyncRpcClient, RpcClient
+from deno_sandbox.errors import ProcessAlreadyExited
+from deno_sandbox.rpc import (
+    AsyncFetchResponse,
+    AsyncRpcClient,
+    FetchResponse,
+    RpcClient,
+)
 
 
 class FileInfo(TypedDict):
@@ -378,24 +383,7 @@ class AsyncDenoProcess(AsyncChildProcess):
         redirect: Literal["follow", "manual"] = None,
     ) -> AsyncFetchResponse:
         """Fetch a URL from the Deno process."""
-
-        abort_id = self._rpc.get_next_signal_id()
-
-        params: FetchParams = {
-            "method": method,
-            "url": url,
-            "redirect": redirect or "follow",
-            "pid": self.pid,
-            "abortId": abort_id,
-        }
-
-        if headers is not None:
-            params["headers"] = list(headers.items())
-        else:
-            params["headers"] = []
-
-        response: FetchResponseData = await self._rpc.call("fetch", params)
-        return AsyncFetchResponse(rpc=self._rpc, response=response)
+        return await self._rpc.fetch(url, method, headers, redirect, self.pid)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._listening_task is not None:
@@ -425,11 +413,7 @@ class DenoProcess(ChildProcess):
     ) -> FetchResponse:
         """Fetch a URL from the Deno process."""
 
-        result = self._rpc._bridge.run(
-            self._async_proc.fetch(url, method, headers, redirect)
-        )
-
-        return FetchResponse(self._rpc, result)
+        return self._rpc.fetch(url, method, headers, redirect, self.pid)
 
 
 class AsyncDenoRepl(AsyncChildProcess):
@@ -478,7 +462,6 @@ class DenoRepl:
         self._async = async_proc
         self.stdout = SyncStreamReader(rpc._bridge, self._async.stdout)
         self.stderr = SyncStreamReader(rpc._bridge, self._async.stderr)
-        self.returncode: int | None = None
 
     def eval(self, code: str) -> str:
         """Evaluate code in the REPL and return the output."""
@@ -496,6 +479,10 @@ class DenoRepl:
         self._rpc._bridge.run(self._async.close())
 
     @property
+    def returncode(self) -> int | None:
+        return self._async.returncode
+
+    @property
     def pid(self) -> int:
         return self._async.pid
 
@@ -508,138 +495,3 @@ class DenoRepl:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._rpc._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
-
-
-class FetchParams(TypedDict):
-    method: str
-    url: str
-    headers: list[tuple[str, str]]
-    redirect: str
-    pid: int
-    abortId: int
-
-
-class FetchResponseData(TypedDict):
-    status: int
-    status_text: str
-    headers: list[tuple[str, str]]
-    body_stream_id: int
-
-
-class AsyncFetchResponse:
-    def __init__(self, rpc: AsyncRpcClient, response: FetchResponseData):
-        self._rpc = rpc
-        self._response = response
-
-    def raise_for_status(self) -> HTTPStatusError | None:
-        if self.is_success:
-            return
-
-        message = "{self} resulted in a {error_type} (status code: {self.status})"
-        status_class = self.status // 100
-        error_types = {
-            1: "Informational response",
-            3: "Redirect response",
-            4: "Client error",
-            5: "Server error",
-        }
-        error_type = error_types.get(status_class, "Invalid status code")
-        message = message.format(self, error_type=error_type)
-
-        return HTTPStatusError(self.status, message)
-
-    @property
-    def headers(self) -> dict[str, str]:
-        return {k: v for k, v in self._response["headers"]}
-
-    @property
-    def status_code(self) -> int:
-        return self._response["status"]
-
-    @property
-    def is_informational(self) -> int:
-        return 100 <= self.status_code <= 199
-
-    @property
-    def is_success(self) -> int:
-        return 200 <= self.status_code <= 299
-
-    @property
-    def is_redirect(self) -> int:
-        return 300 <= self.status_code <= 399
-
-    @property
-    def is_client_error(self) -> int:
-        return 400 <= self.status_code <= 499
-
-    @property
-    def is_server_error(self) -> int:
-        return 500 <= self.status_code <= 599
-
-    @property
-    def is_error(self) -> int:
-        return 400 <= self.status_code <= 599
-
-    @property
-    def has_redirect_location(self) -> bool:
-        return (
-            self.status_code in (301, 302, 303, 307, 308)
-            and "location" in self._response["headers"]
-        )
-
-    async def cancel(self) -> None:
-        await self._rpc.call("abort", {"abortId": self._response["abortId"]})
-
-    def __repr__(self) -> str:
-        return f"<Response [{self.status_code}]>"
-
-
-class FetchResponse(AsyncFetchResponse):
-    def __init__(self, rpc: AsyncRpcClient, async_res: AsyncFetchResponse):
-        self._rpc = rpc
-        self._async = async_res
-
-    def raise_for_status(self) -> HTTPStatusError | None:
-        return self._async.raise_for_status()
-
-    @property
-    def headers(self) -> dict[str, str]:
-        return self._async.headers
-
-    @property
-    def status_code(self) -> int:
-        return self._async.status_code
-
-    @property
-    def is_informational(self) -> int:
-        return self._async.is_informational
-
-    @property
-    def is_success(self) -> int:
-        return self._async.is_success
-
-    @property
-    def is_redirect(self) -> int:
-        return self._async.is_redirect
-
-    @property
-    def is_client_error(self) -> int:
-        return self._async.is_client_error
-
-    @property
-    def is_server_error(self) -> int:
-        return self._async.is_server_error
-
-    @property
-    def is_error(self) -> int:
-        return self._async.is_error
-
-    @property
-    def has_redirect_location(self) -> bool:
-        return self._async.has_redirect_location
-
-    def cancel(self) -> None:
-        self._rpc._bridge.run(self._async.cancel())
-
-    def __repr__(self) -> str:
-        return f"<Response [{self.status_code}]>"
