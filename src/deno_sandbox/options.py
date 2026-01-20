@@ -25,7 +25,11 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
         os.environ.get("DENO_SANDBOX_ENDPOINT", "https://ams.sandbox-api.deno.net")
     )
 
-    token = options and options["token"] or os.environ.get("DENO_DEPLOY_TOKEN", None)
+    token = (
+        options is not None
+        and options.get("token")
+        or os.environ.get("DENO_DEPLOY_TOKEN", None)
+    )
 
     if token is None:
         raise MissingApiToken({"message": "DENO_DEPLOY_TOKEN is not set"})
@@ -38,8 +42,8 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
     )
 
     regions = (
-        options
-        and options["regions"]
+        options is not None
+        and options.get("regions")
         or os.environ.get("DENO_AVAILABLE_REGIONS", "ams1,ord").split(",")
     )
 

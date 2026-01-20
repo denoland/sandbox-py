@@ -1,6 +1,6 @@
 # ATTENTION: This file is auto-generated. Do not edit it manually.
 
-from typing import cast, Any
+from typing import cast
 from typing_extensions import Optional
 from deno_sandbox.api_types_generated import (
     App,
@@ -31,9 +31,6 @@ from deno_sandbox.api_types_generated import (
     MakeTempFileOptions,
     FsOpenOptions,
     SymlinkOptions,
-    DenoRunOptions,
-    DenoReplOptions,
-    DeployOptions,
 )
 
 from deno_sandbox.rpc import RpcClient, AsyncRpcClient
@@ -47,10 +44,6 @@ from deno_sandbox.console import (
 from deno_sandbox.wrappers import (
     FsFile,
     AsyncFsFile,
-    DenoProcess,
-    AsyncDenoProcess,
-    DenoRepl,
-    AsyncDenoRepl,
 )
 
 
@@ -66,7 +59,9 @@ class Apps:
         raw_result = convert_to_snake_case(result)
         return cast(App, raw_result)
 
-    def list(self, options: Optional[AppListOptions] = None) -> PaginatedList[App]:
+    def list(
+        self, options: Optional[AppListOptions] = None
+    ) -> PaginatedList[App, AppListOptions]:
         """List apps of an org."""
 
         result = self._client._apps_list(options)
@@ -109,7 +104,7 @@ class AsyncApps:
 
     async def list(
         self, options: Optional[AppListOptions] = None
-    ) -> AsyncPaginatedList[App]:
+    ) -> AsyncPaginatedList[App, AppListOptions]:
         """List apps of an org."""
 
         result = await self._client._apps_list(options)
@@ -152,7 +147,7 @@ class Revisions:
 
     def list(
         self, app: str, options: Optional[RevisionListOptions] = None
-    ) -> PaginatedList[RevisionWithoutTimelines]:
+    ) -> PaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
         """List revisions for a specific app."""
 
         result = self._client._revisions_list(app, options)
@@ -174,7 +169,7 @@ class AsyncRevisions:
 
     async def list(
         self, app: str, options: Optional[RevisionListOptions] = None
-    ) -> AsyncPaginatedList[RevisionWithoutTimelines]:
+    ) -> AsyncPaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
         """List revisions for a specific app."""
 
         result = await self._client._revisions_list(app, options)
@@ -188,7 +183,7 @@ class Timelines:
 
     def list(
         self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> PaginatedList[Timeline]:
+    ) -> PaginatedList[Timeline, TimelineListOptions]:
         """List timelines for a specific app."""
 
         result = self._client._timelines_list(app, options)
@@ -202,7 +197,7 @@ class AsyncTimelines:
 
     async def list(
         self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> AsyncPaginatedList[Timeline]:
+    ) -> AsyncPaginatedList[Timeline, TimelineListOptions]:
         """List timelines for a specific app."""
 
         result = await self._client._timelines_list(app, options)
@@ -232,7 +227,7 @@ class Volumes:
 
     def list(
         self, options: Optional[VolumeListOptions] = None
-    ) -> PaginatedList[Volume]:
+    ) -> PaginatedList[Volume, VolumeListOptions]:
         result = self._client._volumes_list(options)
 
         return result
@@ -270,7 +265,7 @@ class AsyncVolumes:
 
     async def list(
         self, options: Optional[VolumeListOptions] = None
-    ) -> AsyncPaginatedList[Volume]:
+    ) -> AsyncPaginatedList[Volume, VolumeListOptions]:
         result = await self._client._volumes_list(options)
 
         return result
@@ -300,7 +295,7 @@ class Snapshots:
 
     def list(
         self, options: Optional[SnapshotListOptions] = None
-    ) -> PaginatedList[Snapshot]:
+    ) -> PaginatedList[Snapshot, SnapshotListOptions]:
         """List snapshots."""
 
         result = self._client._snapshots_list(options)
@@ -327,7 +322,7 @@ class AsyncSnapshots:
 
     async def list(
         self, options: Optional[SnapshotListOptions] = None
-    ) -> AsyncPaginatedList[Snapshot]:
+    ) -> AsyncPaginatedList[Snapshot, SnapshotListOptions]:
         """List snapshots."""
 
         result = await self._client._snapshots_list(options)
@@ -850,74 +845,6 @@ class AsyncSandboxFs:
 
         params = {"localPath": local_path, "sandboxPath": sandbox_path}
         await self._rpc.call("download", params)
-
-
-class SandboxDeno:
-    def __init__(self, client: ConsoleClient, rpc: RpcClient):
-        self._client = client
-        self._rpc = rpc
-
-    def run(self, options: DenoRunOptions) -> DenoProcess:
-        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
-
-        params = {}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = self._rpc.call("spawnDeno", params)
-
-        return result
-
-    def eval(self, code: str) -> Any:
-        result = self._client._sandbox_deno_eval(code)
-
-        return result
-
-    def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
-        params = {}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = self._rpc.call("spawnDenoRepl", params)
-
-        return result
-
-    def deploy(self, app: str, options: Optional[DeployOptions] = None) -> None:
-        self._client._sandbox_deno_deploy(app, options)
-
-
-class AsyncSandboxDeno:
-    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
-        self._client = client
-        self._rpc = rpc
-
-    async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
-        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
-
-        params = {}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = await self._rpc.call("spawnDeno", params)
-
-        return result
-
-    async def eval(self, code: str) -> Any:
-        result = await self._client._sandbox_deno_eval(code)
-
-        return result
-
-    async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
-        params = {}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = await self._rpc.call("spawnDenoRepl", params)
-
-        return result
-
-    async def deploy(self, app: str, options: Optional[DeployOptions] = None) -> None:
-        await self._client._sandbox_deno_deploy(app, options)
 
 
 class SandboxEnv:

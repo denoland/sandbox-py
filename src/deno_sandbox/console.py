@@ -9,6 +9,11 @@ from deno_sandbox.api_types_generated import (
     AppUpdate,
     RevisionListOptions,
     RevisionWithoutTimelines,
+    SandboxListOptions,
+    SandboxMeta,
+    Snapshot,
+    SnapshotInit,
+    SnapshotListOptions,
     Timeline,
     TimelineListOptions,
     Volume,
@@ -54,11 +59,11 @@ class AsyncPaginatedList[T, O]:
         self.next_cursor = next_cursor
         """The cursor for pagination."""
 
-    async def get_next_page(self) -> AsyncPaginatedList[T] | None:
+    async def get_next_page(self) -> AsyncPaginatedList[T, O] | None:
         if not self.has_more:
             return None
 
-        return await self._client.get_paginated[T](
+        return await self._client.get_paginated(
             self._path,
             self.next_cursor,
             self._options,
@@ -146,12 +151,12 @@ class AsyncConsoleClient:
         response.raise_for_status()
         return response
 
-    async def post(self, path: str, data: any) -> dict:
+    async def post(self, path: str, data: Any) -> dict:
         req_url = self._options["console_url"].join(path)
         response = await self._request("POST", req_url, data)
         return response.json()
 
-    async def patch(self, path: str, data: any) -> dict:
+    async def patch(self, path: str, data: Any) -> dict:
         req_url = self._options["console_url"].join(path)
         response = await self._request("PATCH", req_url, data)
         return response.json()
@@ -162,14 +167,14 @@ class AsyncConsoleClient:
         req_url = self._options["console_url"].join(path)
 
         if params is not None:
-            req_url = req_url.copy_add_params(params)
+            req_url = req_url.copy_merge_params(params)
 
         response = await self._request("GET", req_url)
         return response.json()
 
     async def get_or_none(
         self, path: str, params: Optional[dict[str, str | int]] = None
-    ) -> dict:
+    ) -> dict | None:
         try:
             return await self.get(path, params)
         except httpx.HTTPStatusError as e:
@@ -182,13 +187,17 @@ class AsyncConsoleClient:
         response = await self._request("DELETE", req_url)
         return response
 
-    async def get_paginated[T](
-        self, path: str, cursor: Optional[str], params: Optional[dict[str, Any]] = None
-    ) -> AsyncPaginatedList[T]:
+    async def get_paginated[T, O](
+        self,
+        path: str,
+        cursor: Optional[str],
+        params: Optional[O] = None,
+    ) -> AsyncPaginatedList[T, O]:
         req_url = self._options["console_url"].join(path)
 
         if params is not None:
-            req_url = req_url.copy_add_params(params)
+            url_params = cast(dict, params)
+            req_url = req_url.copy_merge_params(url_params)
 
         if cursor is not None:
             req_url = req_url.copy_add_param("cursor", cursor)
@@ -236,23 +245,68 @@ class AsyncConsoleClient:
 
     async def _apps_list(
         self, options: Optional[AppListOptions] = None
-    ) -> AsyncPaginatedList[App]:
-        apps: AsyncPaginatedList[App] = await self.get_paginated(
+    ) -> AsyncPaginatedList[App, AppListOptions]:
+        apps: AsyncPaginatedList[App, AppListOptions] = await self.get_paginated(
             path="/api/v2/apps", cursor=None, params=options
         )
         return apps
 
+    async def _revisions_get(self, app: str, id_or_slug: str) -> Revision | None:
+        result = await self.get_or_none(f"/api/v2/apps/{app}/revisions/{id_or_slug}")
+        if result is None:
+            return None
+        return cast(Revision, result)
+
+    async def _revisions_list(
+        self, app: str, options: Optional[RevisionListOptions] = None
+    ) -> AsyncPaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
+        revisions: AsyncPaginatedList[
+            RevisionWithoutTimelines, RevisionListOptions
+        ] = await self.get_paginated(
+            path=f"/api/v2/apps/{app}/revisions", cursor=None, params=options
+        )
+
+        return revisions
+
+    async def _snapshots_get(self, id_or_slug: str) -> Snapshot | None:
+        result = await self.get_or_none(f"/api/v2/snapshots/{id_or_slug}")
+        if result is None:
+            return None
+        return cast(Snapshot, result)
+
+    async def _snapshots_list(
+        self, options: Optional[SnapshotListOptions] = None
+    ) -> AsyncPaginatedList[Snapshot, SnapshotListOptions]:
+        snapshots: AsyncPaginatedList[
+            Snapshot, SnapshotListOptions
+        ] = await self.get_paginated("/api/v2/snapshots", cursor=None, params=options)
+
+        return snapshots
+
+    async def _snapshots_delete(self, id_or_slug: str) -> None:
+        await self.delete(f"/api/v2/snapshots/{id_or_slug}")
+
     async def _timelines_list(
         self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> AsyncPaginatedList[Timeline]:
-        timelines: AsyncPaginatedList[Timeline] = await self.get_paginated(
+    ) -> AsyncPaginatedList[Timeline, TimelineListOptions]:
+        timelines: AsyncPaginatedList[
+            Timeline, TimelineListOptions
+        ] = await self.get_paginated(
             path=f"/api/v2/apps/{app}/timelines", cursor=None, params=options
         )
 
         return timelines
 
     async def _volumes_create(self, data: VolumeInit) -> Volume:
-        result = await self.post("/api/v2/volumes", data)
+        params = {
+            "slug": data["slug"],
+            "capacity": data["capacity"],
+            "region": data["region"],
+        }
+        if data.get("from_snapshot") is not None:
+            params["from"] = data["from_snapshot"]
+
+        result = await self.post("/api/v2/volumes", params)
         return cast(Volume, result)
 
     async def _volumes_get(self, id_or_slug: str) -> Volume | None:
@@ -266,11 +320,28 @@ class AsyncConsoleClient:
 
     async def _volumes_list(
         self, options: Optional[VolumeListOptions] = None
-    ) -> AsyncPaginatedList[Volume]:
-        volumes: AsyncPaginatedList[Volume] = await self.get_paginated(
+    ) -> AsyncPaginatedList[Volume, VolumeListOptions]:
+        volumes: AsyncPaginatedList[
+            Volume, VolumeListOptions
+        ] = await self.get_paginated(
             path="/api/v2/volumes", cursor=None, params=options
         )
         return volumes
+
+    async def _volumes_snapshot(self, id_or_slug: str, init: SnapshotInit) -> Snapshot:
+        result = await self.post(f"/api/v2/volumes/{id_or_slug}/snapshot", init)
+        return cast(Snapshot, result)
+
+    # FIXME test
+    async def _sandboxes_list(
+        self, options: Optional[SandboxListOptions] = None
+    ) -> AsyncPaginatedList[SandboxMeta, SandboxListOptions]:
+        sandboxes: AsyncPaginatedList[
+            SandboxMeta, SandboxListOptions
+        ] = await self.get_paginated(
+            path="/api/v3/sandboxes", cursor=None, params=options
+        )
+        return sandboxes
 
     async def _kill_sandbox(self, sandbox_id: str) -> None:
         await self.delete(f"/api/v3/sandboxes/{sandbox_id}")
@@ -308,11 +379,11 @@ class ConsoleClient:
         self._async = AsyncConsoleClient(options)
         self._bridge = bridge
 
-    def get_paginated[T](
-        self, path: str, cursor: Optional[str], params: Optional[dict[str, Any]] = None
-    ) -> PaginatedList[T]:
+    def get_paginated[T, O](
+        self, path: str, cursor: Optional[str], params: Optional[O] = None
+    ) -> PaginatedList[T, O]:
         async_paginated = self._bridge.run(
-            self._async.get_paginated[T](path, cursor, params)
+            self._async.get_paginated(path, cursor, params)
         )
 
         return PaginatedList(self._bridge, async_paginated)
@@ -332,8 +403,8 @@ class ConsoleClient:
 
     def _apps_list(
         self, options: Optional[AppListOptions] = None
-    ) -> PaginatedList[App]:
-        paginated: AsyncPaginatedList[App] = self._bridge.run(
+    ) -> PaginatedList[App, AppListOptions]:
+        paginated: AsyncPaginatedList[App, AppListOptions] = self._bridge.run(
             self._async._apps_list(options)
         )
         return PaginatedList(self._bridge, paginated)
@@ -347,21 +418,34 @@ class ConsoleClient:
     def _apps_delete(self, app: str) -> None:
         self._bridge.run(self._async._apps_delete(app))
 
-    def _revisions_get(self, app: str, id: str) -> None:
-        return self._bridge.run(self._async._revisions_get(app, id))
+    def _revisions_get(self, app: str, id_or_slug: str) -> Revision | None:
+        return self._bridge.run(self._async._revisions_get(app, id_or_slug))
 
     def _revisions_list(
         self, app: str, options: Optional[RevisionListOptions] = None
-    ) -> PaginatedList[RevisionWithoutTimelines]:
-        paginated: AsyncPaginatedList[RevisionWithoutTimelines] = self._bridge.run(
-            self._async._revisions_list(app, options)
+    ) -> PaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
+        paginated: AsyncPaginatedList[RevisionWithoutTimelines, RevisionListOptions] = (
+            self._bridge.run(self._async._revisions_list(app, options))
         )
         return PaginatedList(self._bridge, paginated)
 
+    def _snapshots_get(self, id_or_slug: str) -> Snapshot | None:
+        return self._bridge.run(self._async._snapshots_get(id_or_slug))
+
+    def _snapshots_list(
+        self, options: Optional[SnapshotListOptions] = None
+    ) -> PaginatedList[Snapshot, SnapshotListOptions]:
+        result = self._bridge.run(self._async._snapshots_list(options))
+
+        return PaginatedList(self._bridge, result)
+
+    def _snapshots_delete(self, id_or_slug: str) -> None:
+        self._bridge.run(self._async._snapshots_delete(id_or_slug))
+
     def _timelines_list(
         self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> PaginatedList[Timeline]:
-        paginated: AsyncPaginatedList[Timeline] = self._bridge.run(
+    ) -> PaginatedList[Timeline, TimelineListOptions]:
+        paginated: AsyncPaginatedList[Timeline, TimelineListOptions] = self._bridge.run(
             self._async._timelines_list(app, options)
         )
         return PaginatedList(self._bridge, paginated)
@@ -377,9 +461,20 @@ class ConsoleClient:
 
     def _volumes_list(
         self, options: Optional[VolumeListOptions] = None
-    ) -> PaginatedList[Volume]:
-        paginated: AsyncPaginatedList[Volume] = self._bridge.run(
+    ) -> PaginatedList[Volume, VolumeListOptions]:
+        paginated: AsyncPaginatedList[Volume, VolumeListOptions] = self._bridge.run(
             self._async._volumes_list(options)
+        )
+        return PaginatedList(self._bridge, paginated)
+
+    def _volumes_snapshot(self, id_or_slug: str, init: SnapshotInit) -> Snapshot:
+        return self._bridge.run(self._async._volumes_snapshot(id_or_slug, init))
+
+    def _sandboxes_list(
+        self, options: Optional[SandboxListOptions] = None
+    ) -> PaginatedList[SandboxMeta, SandboxListOptions]:
+        paginated: AsyncPaginatedList[SandboxMeta, SandboxListOptions] = (
+            self._bridge.run(self._async._sandboxes_list(options))
         )
         return PaginatedList(self._bridge, paginated)
 

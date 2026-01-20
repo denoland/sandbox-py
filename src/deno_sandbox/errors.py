@@ -1,4 +1,4 @@
-from typing import Any, TypedDict
+from typing import TypedDict
 
 
 class AuthenticationError(Exception):
@@ -39,10 +39,6 @@ class ZodErrorRaw(TypedDict):
     code: str
     path: list[str]
     message: str
-
-    def __init__(self, zod_error: dict[str, Any]) -> None:
-        self.zod_error = zod_error
-        super().__init__("Zod Validation Error")
 
 
 class RpcValidationError(ValueError):

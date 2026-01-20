@@ -24,8 +24,7 @@ def main()
   sdk = DenoDeploy()
 
   with sdk.sandbox.create() as sb
-    child_process = sb.spawn({
-      "command": "npx",
+    child_process = sb.spawn("npx", {
       "args": [
         "cowsay",
         "hello"
@@ -47,8 +46,7 @@ async def main()
   sdk = AsyncDenoDeploy()
 
   async with sdk.sandbox.create() as sb
-    child_process = await sb.spawn({
-      "command": "npx",
+    child_process = await sb.spawn("npx", {
       "args": [
         "cowsay",
         "hello"

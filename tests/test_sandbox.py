@@ -28,7 +28,7 @@ async def test_connect_async():
     sdk = AsyncDenoDeploy()
 
     async with sdk.sandbox.create() as sandbox:
-        async with sdk.sandbox.connect(sandbox.id) as connected_sandbox:
+        async with sdk.sandbox.connect({"id": sandbox.id}) as connected_sandbox:
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
@@ -42,7 +42,7 @@ def test_connect_sync():
     sdk = DenoDeploy()
 
     with sdk.sandbox.create() as sandbox:
-        with sdk.sandbox.connect(sandbox.id) as connected_sandbox:
+        with sdk.sandbox.connect({"id": sandbox.id}) as connected_sandbox:
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 

@@ -133,6 +133,9 @@ class VolumeInit(TypedDict):
     capacity: int | str
     """The capacity of the volume in bytes. When passing a string you can use these units too: GB, MB, kB, GiB, MiB, KiB"""
 
+    from_snapshot: NotRequired[str | None]
+    """The ID or slug of the snapshot to create the volume from."""
+
 
 class BaseSnapshot(TypedDict):
     id: str
@@ -181,7 +184,7 @@ class Volume(TypedDict):
     is_bootable: bool
     """Whether the volume is bootable."""
 
-    base_snapshot: BaseSnapshot
+    base_snapshot: NotRequired[BaseSnapshot | None]
     """The snapshot the volume was created from."""
 
 
@@ -273,7 +276,7 @@ class SandboxCreateOptions(TypedDict):
   Other possible values are durations like "30s" (30 Seconds) or "2m" (2 minutes), after which the sandbox will be automatically destroyed.
   """
 
-    memory_db: NotRequired[str | None]
+    memory_mb: NotRequired[int | None]
     """
   The memory size in MiB of the sandbox. When not specified, it defaults to the default value (1280). Example values: 1024, 4096
                 
@@ -397,11 +400,39 @@ class SandboxMeta(TypedDict):
 
 
 class SpawnOptions(TypedDict):
+    args: NotRequired[list[str] | None]
+    """Arguments to pass to the process."""
+
     cwd: NotRequired[str | None]
+    """
+  The working directory of the process.
+  
+  If not specified, the `cwd` of the parent process is used.
+  """
+
     clear_env: NotRequired[bool | None]
+    """
+  Clear environment variables from parent process.
+  
+  Doesn't guarantee that only `env` variables are present, as the OS may set environment variables for processes.
+  """
+
     env: NotRequired[dict[str, str] | None]
+    """Environment variables to pass to the subprocess."""
+
     signal: NotRequired[AbortSignal | None]
     stdin: NotRequired[Literal["piped", "null"] | None]
+    """
+  How `stdin` of the spawned process should be handled.
+  
+   - "piped": The `stdin` of the spawned process is a writable stream that can
+     be used to write data to the process. The writable stream can be accessed
+     via {@linkcode ChildProcess.stdin}.
+   - "null": The `stdin` of the spawned process is immediately closed and
+     cannot be written to. This is useful for processes that do not require
+     any input.
+  """
+
     stdout: NotRequired[Literal["piped", "null", "inherit"] | None]
     stderr: NotRequired[Literal["piped", "null", "inherit"] | None]
 
@@ -626,11 +657,39 @@ class SymlinkOptions(TypedDict):
 
 
 class DenoRunOptions(TypedDict):
+    args: NotRequired[list[str] | None]
+    """Arguments to pass to the process."""
+
     cwd: NotRequired[str | None]
+    """
+  The working directory of the process.
+  
+  If not specified, the `cwd` of the parent process is used.
+  """
+
     clear_env: NotRequired[bool | None]
+    """
+  Clear environment variables from parent process.
+  
+  Doesn't guarantee that only `env` variables are present, as the OS may set environment variables for processes.
+  """
+
     env: NotRequired[dict[str, str] | None]
+    """Environment variables to pass to the subprocess."""
+
     signal: NotRequired[AbortSignal | None]
     stdin: NotRequired[Literal["piped", "null"] | None]
+    """
+  How `stdin` of the spawned process should be handled.
+  
+   - "piped": The `stdin` of the spawned process is a writable stream that can
+     be used to write data to the process. The writable stream can be accessed
+     via {@linkcode ChildProcess.stdin}.
+   - "null": The `stdin` of the spawned process is immediately closed and
+     cannot be written to. This is useful for processes that do not require
+     any input.
+  """
+
     stdout: NotRequired[Literal["piped", "null", "inherit"] | None]
     stderr: NotRequired[Literal["piped", "null", "inherit"] | None]
     script_args: NotRequired[list[str] | None]
@@ -649,11 +708,39 @@ class DenoRunOptions(TypedDict):
 
 
 class DenoReplOptions(TypedDict):
+    args: NotRequired[list[str] | None]
+    """Arguments to pass to the process."""
+
     cwd: NotRequired[str | None]
+    """
+  The working directory of the process.
+  
+  If not specified, the `cwd` of the parent process is used.
+  """
+
     clear_env: NotRequired[bool | None]
+    """
+  Clear environment variables from parent process.
+  
+  Doesn't guarantee that only `env` variables are present, as the OS may set environment variables for processes.
+  """
+
     env: NotRequired[dict[str, str] | None]
+    """Environment variables to pass to the subprocess."""
+
     signal: NotRequired[AbortSignal | None]
     stdin: NotRequired[Literal["piped", "null"] | None]
+    """
+  How `stdin` of the spawned process should be handled.
+  
+   - "piped": The `stdin` of the spawned process is a writable stream that can
+     be used to write data to the process. The writable stream can be accessed
+     via {@linkcode ChildProcess.stdin}.
+   - "null": The `stdin` of the spawned process is immediately closed and
+     cannot be written to. This is useful for processes that do not require
+     any input.
+  """
+
     stdout: NotRequired[Literal["piped", "null", "inherit"] | None]
     stderr: NotRequired[Literal["piped", "null", "inherit"] | None]
     script_args: NotRequired[list[str] | None]

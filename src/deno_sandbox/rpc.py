@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import json
-from typing import Any, Dict, Literal, Optional, TypedDict, cast
+from typing import Any, Dict, Literal, Mapping, NotRequired, Optional, TypedDict, cast
 from websockets import ConnectionClosed
 
 from deno_sandbox.bridge import AsyncBridge
@@ -24,19 +24,19 @@ class RpcRequest(TypedDict):
     id: int
     method: str
     params: dict[str, Any]
-    jsonrpc: str = "2.0"
+    jsonrpc: str
 
 
 class RpcResult[T](TypedDict):
-    ok: T | None = None
-    error: Any | None = None
+    ok: NotRequired[T | None]
+    error: NotRequired[Any | None]
 
 
 class RpcResponse[T](TypedDict):
     id: int
-    jsonrpc: str = "2.0"
-    result: RpcResult[T] | None = None
-    error: dict[str, Any] | None = None
+    jsonrpc: str
+    result: NotRequired[RpcResult[T] | None]
+    error: NotRequired[dict[str, Any] | None]
 
 
 class AsyncRpcClient:
@@ -46,16 +46,19 @@ class AsyncRpcClient:
         self._pending_requests: Dict[int, asyncio.Future[Any]] = {}
         self._listen_task: asyncio.Task[Any] | None = None
         self._pending_processes: Dict[int, asyncio.StreamReader] = {}
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self.__loop: asyncio.AbstractEventLoop | None = None
         self._signal_id = 0
+
+    @property
+    def _loop(self) -> asyncio.AbstractEventLoop:
+        if self.__loop is None:
+            self.__loop = asyncio.get_running_loop()
+        return self.__loop
 
     async def close(self):
         await self._transport.close()
 
-    async def call(self, method: str, params: Dict[str, Any]) -> Any:
-        if self._loop is None:
-            self._loop = asyncio.get_running_loop()
-
+    async def call(self, method: str, params: Mapping[str, Any]) -> Any:
         if self._listen_task is None or self._listen_task.done():
             self._listen_task = self._loop.create_task(self._listener())
 
@@ -75,12 +78,13 @@ class AsyncRpcClient:
         raw_response = await future
         response = cast(RpcResponse[Any], raw_response)
 
-        if response.get("error") is not None:
-            if response["error"].get("message") == "Method not found":
+        maybeError = response.get("error")
+        if maybeError is not None:
+            if maybeError.get("message") == "Method not found":
                 raise UnknownRpcMethod("RPC method not found")
 
-            if response["error"].get("data") is not None:
-                data = response["error"]["data"]
+            if maybeError.get("data") is not None:
+                data = maybeError["data"]
                 if data.get("constructor_name") == "ZodError":
                     # For some reason ZodError data is serialized as
                     # json inside json ¯\_(ツ)_/¯
@@ -93,20 +97,23 @@ class AsyncRpcClient:
 
                     raise RpcValidationError(zod_errors)
 
-            raise Exception(response["error"])
+            raise Exception(maybeError)
 
-        if response.get("result") and response["result"].get("error"):
-            err = response["result"]["error"]
-            if (
-                "constructor_name" in err
-                and err["constructor_name"] == "TypeError"
-                and "code" in err
-                and err["code"] == "ENOENT"
-            ):
-                raise ProcessAlreadyExited("Process has already exited")
+        maybeResult = response.get("result")
+        if maybeResult is not None:
+            err = maybeResult.get("error")
+            if err is not None:
+                if (
+                    "constructor_name" in err
+                    and err.get("constructor_name") == "TypeError"
+                    and "code" in err
+                    and err.get("code") == "ENOENT"
+                ):
+                    raise ProcessAlreadyExited("Process has already exited")
 
-            raise Exception(f"Application Error: {err}")
-        return response["result"]["ok"] if response.get("result") else None
+                raise Exception(f"Application Error: {err}")
+
+        return maybeResult["ok"] if maybeResult else None
 
     async def _listener(self) -> None:
         try:
@@ -149,7 +156,7 @@ class AsyncRpcClient:
         url: str,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
-        redirect: Literal["follow", "manual"] = None,
+        redirect: Optional[Literal["follow", "manual"]] = None,
         pid: Optional[int] = None,
     ) -> AsyncFetchResponse:
         self._signal_id += 1
@@ -186,10 +193,10 @@ class RpcClient:
         url: str,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
-        redirect: Literal["follow", "manual"] = None,
+        redirect: Optional[Literal["follow", "manual"]] = None,
         pid: Optional[int] = None,
     ) -> FetchResponse:
-        response = self._bridge.run(
+        response: AsyncFetchResponse = self._bridge.run(
             self._async_client.fetch(url, method, headers, redirect, pid)
         )
 
@@ -204,7 +211,7 @@ class FetchParams(TypedDict):
     url: str
     headers: list[tuple[str, str]]
     redirect: str
-    pid: int
+    pid: NotRequired[int | None]
     abortId: int
 
 
@@ -224,8 +231,8 @@ class AsyncFetchResponse:
         if self.is_success:
             return
 
-        message = "{self} resulted in a {error_type} (status code: {self.status})"
-        status_class = self.status // 100
+        message = "{self} resulted in a {error_type} (status code: {self.status_code})"
+        status_class = self.status_code // 100
         error_types = {
             1: "Informational response",
             3: "Redirect response",
@@ -235,7 +242,7 @@ class AsyncFetchResponse:
         error_type = error_types.get(status_class, "Invalid status code")
         message = message.format(self, error_type=error_type)
 
-        return HTTPStatusError(self.status, message)
+        return HTTPStatusError(self.status_code, message)
 
     @property
     def headers(self) -> list[tuple[str, str]]:
@@ -276,15 +283,12 @@ class AsyncFetchResponse:
             and "location" in self._response["headers"]
         )
 
-    async def cancel(self) -> None:
-        await self._rpc.call("abort", {"abortId": self._response["abortId"]})
-
     def __repr__(self) -> str:
         return f"<Response [{self.status_code}]>"
 
 
 class FetchResponse(AsyncFetchResponse):
-    def __init__(self, rpc: AsyncRpcClient, async_res: AsyncFetchResponse):
+    def __init__(self, rpc: RpcClient, async_res: AsyncFetchResponse):
         self._rpc = rpc
         self._async = async_res
 
@@ -326,9 +330,6 @@ class FetchResponse(AsyncFetchResponse):
     @property
     def has_redirect_location(self) -> bool:
         return self._async.has_redirect_location
-
-    def cancel(self) -> None:
-        self._rpc._bridge.run(self._async.cancel())
 
     def __repr__(self) -> str:
         return f"<Response [{self.status_code}]>"
