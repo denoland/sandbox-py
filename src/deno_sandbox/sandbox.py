@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
@@ -5,12 +7,11 @@ import json
 from typing import (
     Any,
     AsyncIterator,
-    NotRequired,
     Optional,
     TypedDict,
     cast,
 )
-from typing_extensions import Literal
+from typing_extensions import Literal, NotRequired, TypeAlias
 
 from .api_generated import (
     AsyncSandboxEnv,
@@ -63,8 +64,8 @@ from .wrappers import (
 )
 
 
-type Mode = Literal["connect", "create"]
-type StdIo = Literal["piped", "null"]
+Mode: TypeAlias = Literal["connect", "create"]
+StdIo: TypeAlias = Literal["piped", "null"]
 
 
 class SecretConfig(TypedDict):

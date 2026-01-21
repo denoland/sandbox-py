@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import sys
-from typing import Any, BinaryIO, Callable, Optional, TypedDict, cast
+from typing import Any, BinaryIO, Callable, Optional, TypedDict, TypeVar, cast
 from typing_extensions import Literal
+
 from .bridge import AsyncBridge
 from .errors import ProcessAlreadyExited
 from .rpc import (
@@ -11,6 +14,8 @@ from .rpc import (
     FetchResponse,
     RpcClient,
 )
+
+T = TypeVar("T")
 
 
 class FileInfo(TypedDict):
@@ -303,7 +308,7 @@ async def _pipe_stream(reader: asyncio.StreamReader, writer: BinaryIO):
         pass
 
 
-def create_process_like[T](
+def create_process_like(
     cls: Callable[
         [
             int,

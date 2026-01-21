@@ -1,5 +1,6 @@
 # ATTENTION: This file is auto-generated. Do not edit it manually.
 
+from __future__ import annotations
 
 from typing_extensions import TypedDict, NotRequired, Literal
 from re import Pattern

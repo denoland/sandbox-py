@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from websockets import ClientConnection, ConnectionClosed, connect
 from httpx import URL
 

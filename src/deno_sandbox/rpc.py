@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import json
-from typing import Any, Dict, Literal, Mapping, NotRequired, Optional, TypedDict, cast
+from typing import Any, Dict, Literal, Mapping, Optional, TypedDict, cast
+from typing_extensions import NotRequired
 from websockets import ConnectionClosed
 
 from .bridge import AsyncBridge
@@ -27,15 +30,15 @@ class RpcRequest(TypedDict):
     jsonrpc: str
 
 
-class RpcResult[T](TypedDict):
-    ok: NotRequired[T | None]
-    error: NotRequired[Any | None]
+class RpcResult(TypedDict):
+    ok: NotRequired[Any]
+    error: NotRequired[Any]
 
 
-class RpcResponse[T](TypedDict):
+class RpcResponse(TypedDict):
     id: int
     jsonrpc: str
-    result: NotRequired[RpcResult[T] | None]
+    result: NotRequired[RpcResult | None]
     error: NotRequired[dict[str, Any] | None]
 
 
@@ -76,7 +79,7 @@ class AsyncRpcClient:
         await self._transport.send(json.dumps(payload))
 
         raw_response = await future
-        response = cast(RpcResponse[Any], raw_response)
+        response = cast(RpcResponse, raw_response)
 
         maybeError = response.get("error")
         if maybeError is not None:

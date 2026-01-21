@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import os
 
-from typing import NotRequired, Optional, TypedDict
+from typing import Optional, TypedDict
+from typing_extensions import NotRequired
 
 from httpx import URL
 
