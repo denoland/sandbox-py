@@ -6,12 +6,18 @@ from datetime import datetime, timedelta, timezone
 import json
 from typing import (
     Any,
+    AsyncIterable,
     AsyncIterator,
+    BinaryIO,
+    Iterable,
     Optional,
     TypedDict,
+    Union,
     cast,
 )
 from typing_extensions import Literal, NotRequired, TypeAlias
+
+from .stream import stream_data
 
 from .api_generated import (
     AsyncSandboxEnv,
@@ -24,11 +30,13 @@ from .api_types_generated import (
     DenoRunOptions,
     FsFileHandle,
     FsOpenOptions,
+    ReadFileOptions,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
     SandboxMeta,
     SpawnOptions,
+    WriteFileOptions,
 )
 from .bridge import AsyncBridge
 from .console import (
@@ -575,6 +583,20 @@ class Sandbox:
 class AsyncSandboxFs(AsyncSandboxFsGenerated):
     """Filesystem operations inside the sandbox."""
 
+    async def read_file(
+        self, path: str, options: Optional[ReadFileOptions] = None
+    ) -> bytes:
+        """Reads the entire contents of a file as bytes."""
+
+        params: dict[str, Any] = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("readFile", params)
+
+        # Server returns base64-encoded data
+        return base64.b64decode(result)
+
     async def create(self, path: str) -> AsyncFsFile:
         """Create a new, empty file at the specified path."""
 
@@ -602,9 +624,43 @@ class AsyncSandboxFs(AsyncSandboxFsGenerated):
 
         return AsyncFsFile(self._rpc, handle["file_handle_id"])
 
+    async def write_file(
+        self,
+        path: str,
+        data: Union[bytes, AsyncIterable[bytes], Iterable[bytes], BinaryIO],
+        options: Optional[WriteFileOptions] = None,
+    ) -> None:
+        """Write bytes to file. Accepts bytes, async/sync iterables, or file objects."""
+
+        if isinstance(data, bytes):
+            # Stream bytes as a single chunk
+            content_stream_id = await stream_data(self._rpc, iter([data]))
+        else:
+            # Stream data from iterable/file object
+            content_stream_id = await stream_data(self._rpc, data)
+
+        params: dict[str, Any] = {"path": path, "contentStreamId": content_stream_id}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+        await self._rpc.call("writeFile", params)
+
 
 class SandboxFs(SandboxFsGenerated):
     """Filesystem operations inside the sandbox."""
+
+    def read_file(
+        self, path: str, options: Optional[ReadFileOptions] = None
+    ) -> bytes:
+        """Reads the entire contents of a file as bytes."""
+
+        params: dict[str, Any] = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("readFile", params)
+
+        # Server returns base64-encoded data
+        return base64.b64decode(result)
 
     def create(self, path: str) -> FsFile:
         """Create a new, empty file at the specified path."""
@@ -630,6 +686,30 @@ class SandboxFs(SandboxFsGenerated):
         handle = cast(FsFileHandle, raw_result)
 
         return FsFile(self._rpc, handle["file_handle_id"])
+
+    def write_file(
+        self,
+        path: str,
+        data: Union[bytes, Iterable[bytes], BinaryIO],
+        options: Optional[WriteFileOptions] = None,
+    ) -> None:
+        """Write bytes to file. Accepts bytes, sync iterables, or file objects."""
+
+        if isinstance(data, bytes):
+            # Stream bytes as a single chunk
+            content_stream_id = self._client._bridge.run(
+                stream_data(self._rpc._async_client, iter([data]))
+            )
+        else:
+            # Stream data from iterable/file object
+            content_stream_id = self._client._bridge.run(
+                stream_data(self._rpc._async_client, data)
+            )
+
+        params: dict[str, Any] = {"path": path, "contentStreamId": content_stream_id}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+        self._rpc.call("writeFile", params)
 
 
 class AsyncVsCode:
