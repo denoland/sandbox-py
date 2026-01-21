@@ -4,6 +4,7 @@ import base64
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from typing import (
     Any,
     AsyncIterable,
@@ -683,6 +684,34 @@ class AsyncSandboxFs(AsyncSandboxFsGenerated):
             params["options"] = convert_to_camel_case(options)
         await self._rpc.call("writeFile", params)
 
+    async def upload(self, local_path: str, sandbox_path: str) -> None:
+        """Upload a file, directory, or symlink from local filesystem to the sandbox.
+
+        Recursively uploads directories and their contents.
+        Preserves symlinks by creating corresponding symlinks in the sandbox.
+        """
+        await self._upload_item(local_path, sandbox_path)
+
+    async def _upload_item(self, local_path: str, sandbox_path: str) -> None:
+        """Internal method to upload a single item (file, directory, or symlink)."""
+        if os.path.islink(local_path):
+            # It's a symlink - read the target and create a symlink in sandbox
+            target = os.readlink(local_path)
+            await self.symlink(target, sandbox_path)
+        elif os.path.isdir(local_path):
+            # It's a directory - create it and recursively upload contents
+            await self.mkdir(sandbox_path, {"recursive": True})
+            for entry in os.listdir(local_path):
+                entry_local_path = os.path.join(local_path, entry)
+                entry_sandbox_path = f"{sandbox_path}/{entry}"
+                await self._upload_item(entry_local_path, entry_sandbox_path)
+        elif os.path.isfile(local_path):
+            # It's a file - stream it to write_file
+            with open(local_path, "rb") as f:
+                await self.write_file(sandbox_path, f)
+        else:
+            raise FileNotFoundError(f"Local path does not exist: {local_path}")
+
 
 class SandboxFs(SandboxFsGenerated):
     """Filesystem operations inside the sandbox."""
@@ -747,6 +776,34 @@ class SandboxFs(SandboxFsGenerated):
         if options is not None:
             params["options"] = convert_to_camel_case(options)
         self._rpc.call("writeFile", params)
+
+    def upload(self, local_path: str, sandbox_path: str) -> None:
+        """Upload a file, directory, or symlink from local filesystem to the sandbox.
+
+        Recursively uploads directories and their contents.
+        Preserves symlinks by creating corresponding symlinks in the sandbox.
+        """
+        self._upload_item(local_path, sandbox_path)
+
+    def _upload_item(self, local_path: str, sandbox_path: str) -> None:
+        """Internal method to upload a single item (file, directory, or symlink)."""
+        if os.path.islink(local_path):
+            # It's a symlink - read the target and create a symlink in sandbox
+            target = os.readlink(local_path)
+            self.symlink(target, sandbox_path)
+        elif os.path.isdir(local_path):
+            # It's a directory - create it and recursively upload contents
+            self.mkdir(sandbox_path, {"recursive": True})
+            for entry in os.listdir(local_path):
+                entry_local_path = os.path.join(local_path, entry)
+                entry_sandbox_path = f"{sandbox_path}/{entry}"
+                self._upload_item(entry_local_path, entry_sandbox_path)
+        elif os.path.isfile(local_path):
+            # It's a file - stream it to write_file
+            with open(local_path, "rb") as f:
+                self.write_file(sandbox_path, f)
+        else:
+            raise FileNotFoundError(f"Local path does not exist: {local_path}")
 
 
 class AsyncVsCode:

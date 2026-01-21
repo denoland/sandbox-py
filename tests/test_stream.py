@@ -1,4 +1,6 @@
 import io
+import os
+import tempfile
 import pytest
 
 
@@ -306,3 +308,149 @@ if (n) {
 
     stdout = p.stdout.read(-1)
     assert stdout == b"deno stdin test sync"
+
+
+# upload tests
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_upload_file_async(async_shared_sandbox):
+    """Test uploading a single file (async)."""
+    sb = async_shared_sandbox
+
+    with tempfile.NamedTemporaryFile(delete=False) as f:
+        f.write(b"uploaded file content")
+        local_path = f.name
+
+    try:
+        await sb.fs.upload(local_path, "/tmp/uploaded_file.txt")
+        content = await sb.fs.read_file("/tmp/uploaded_file.txt")
+        assert content == b"uploaded file content"
+    finally:
+        os.unlink(local_path)
+
+
+def test_upload_file_sync(shared_sandbox):
+    """Test uploading a single file (sync)."""
+    sb = shared_sandbox
+
+    with tempfile.NamedTemporaryFile(delete=False) as f:
+        f.write(b"uploaded file content sync")
+        local_path = f.name
+
+    try:
+        sb.fs.upload(local_path, "/tmp/uploaded_file_sync.txt")
+        content = sb.fs.read_file("/tmp/uploaded_file_sync.txt")
+        assert content == b"uploaded file content sync"
+    finally:
+        os.unlink(local_path)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_upload_directory_async(async_shared_sandbox):
+    """Test uploading a directory with files (async)."""
+    sb = async_shared_sandbox
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create some files in the directory
+        with open(os.path.join(tmpdir, "file1.txt"), "wb") as f:
+            f.write(b"file1 content")
+        with open(os.path.join(tmpdir, "file2.txt"), "wb") as f:
+            f.write(b"file2 content")
+
+        # Create a subdirectory with a file
+        subdir = os.path.join(tmpdir, "subdir")
+        os.makedirs(subdir)
+        with open(os.path.join(subdir, "nested.txt"), "wb") as f:
+            f.write(b"nested content")
+
+        await sb.fs.upload(tmpdir, "/tmp/uploaded_dir")
+
+        # Verify files were uploaded
+        content1 = await sb.fs.read_file("/tmp/uploaded_dir/file1.txt")
+        assert content1 == b"file1 content"
+
+        content2 = await sb.fs.read_file("/tmp/uploaded_dir/file2.txt")
+        assert content2 == b"file2 content"
+
+        nested = await sb.fs.read_file("/tmp/uploaded_dir/subdir/nested.txt")
+        assert nested == b"nested content"
+
+
+def test_upload_directory_sync(shared_sandbox):
+    """Test uploading a directory with files (sync)."""
+    sb = shared_sandbox
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create some files in the directory
+        with open(os.path.join(tmpdir, "file1.txt"), "wb") as f:
+            f.write(b"file1 content sync")
+        with open(os.path.join(tmpdir, "file2.txt"), "wb") as f:
+            f.write(b"file2 content sync")
+
+        # Create a subdirectory with a file
+        subdir = os.path.join(tmpdir, "subdir")
+        os.makedirs(subdir)
+        with open(os.path.join(subdir, "nested.txt"), "wb") as f:
+            f.write(b"nested content sync")
+
+        sb.fs.upload(tmpdir, "/tmp/uploaded_dir_sync")
+
+        # Verify files were uploaded
+        content1 = sb.fs.read_file("/tmp/uploaded_dir_sync/file1.txt")
+        assert content1 == b"file1 content sync"
+
+        content2 = sb.fs.read_file("/tmp/uploaded_dir_sync/file2.txt")
+        assert content2 == b"file2 content sync"
+
+        nested = sb.fs.read_file("/tmp/uploaded_dir_sync/subdir/nested.txt")
+        assert nested == b"nested content sync"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_upload_symlink_async(async_shared_sandbox):
+    """Test uploading a symlink (async)."""
+    sb = async_shared_sandbox
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create a file and a symlink to it
+        target_path = os.path.join(tmpdir, "target.txt")
+        with open(target_path, "wb") as f:
+            f.write(b"target content")
+
+        link_path = os.path.join(tmpdir, "link.txt")
+        os.symlink("target.txt", link_path)
+
+        await sb.fs.upload(tmpdir, "/tmp/uploaded_symlink_dir")
+
+        # Verify the target file was uploaded
+        content = await sb.fs.read_file("/tmp/uploaded_symlink_dir/target.txt")
+        assert content == b"target content"
+
+        # Verify the symlink was created (read through symlink)
+        link_info = await sb.fs.lstat("/tmp/uploaded_symlink_dir/link.txt")
+        assert link_info["is_symlink"] is True
+
+
+def test_upload_symlink_sync(shared_sandbox):
+    """Test uploading a symlink (sync)."""
+    sb = shared_sandbox
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create a file and a symlink to it
+        target_path = os.path.join(tmpdir, "target.txt")
+        with open(target_path, "wb") as f:
+            f.write(b"target content sync")
+
+        link_path = os.path.join(tmpdir, "link.txt")
+        os.symlink("target.txt", link_path)
+
+        sb.fs.upload(tmpdir, "/tmp/uploaded_symlink_dir_sync")
+
+        # Verify the target file was uploaded
+        content = sb.fs.read_file("/tmp/uploaded_symlink_dir_sync/target.txt")
+        assert content == b"target content sync"
+
+        # Verify the symlink was created
+        link_info = sb.fs.lstat("/tmp/uploaded_symlink_dir_sync/link.txt")
+        assert link_info["is_symlink"] is True
