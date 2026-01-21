@@ -27,7 +27,7 @@ from .options import InternalOptions
 from .utils import convert_to_snake_case, parse_link_header
 
 T = TypeVar("T")
-O = TypeVar("O")
+O = TypeVar("O")  # noqa: E741
 
 
 class Revision(RevisionWithoutTimelines):
