@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import sys
 from typing import Any, BinaryIO, Callable, Optional, TypedDict, cast
 from typing_extensions import Literal
@@ -49,9 +50,10 @@ class AsyncFsFile:
         """Write data to the file. Returns number of bytes written."""
 
         result = await self._rpc.call(
-            "fileWrite", {"data": data, "fileHandleId": self._fd}
+            "fileWrite",
+            {"data": base64.b64encode(data).decode("ascii"), "fileHandleId": self._fd},
         )
-        return result["bytesWritten"]
+        return result["bytes_written"]
 
     async def truncate(self, size: Optional[int]) -> None:
         """Truncate the file to the given size. If size is None, truncate to 0."""
@@ -64,7 +66,7 @@ class AsyncFsFile:
         result = await self._rpc.call(
             "fileRead", {"length": size, "fileHandleId": self._fd}
         )
-        return result
+        return base64.b64decode(result["data"])
 
     async def seek(self, offset: int, whence: int) -> int:
         """Seek to a position in the file. Returns the new position."""
@@ -80,12 +82,12 @@ class AsyncFsFile:
         result = await self._rpc.call("fileStat", {"fileHandleId": self._fd})
         return cast(FileInfo, result)
 
-    async def flush(self) -> None:
-        """Flush the file's internal buffer."""
+    async def sync(self) -> None:
+        """Flushes any pending data and metadata operations of the given file stream to disk."""
 
-        await self._rpc.call("fileFlush", {"fileHandleId": self._fd})
+        await self._rpc.call("fileSync", {"fileHandleId": self._fd})
 
-    async def syncData(self) -> None:
+    async def sync_data(self) -> None:
         """Sync the file's data to disk."""
 
         await self._rpc.call("fileSyncData", {"fileHandleId": self._fd})
@@ -152,15 +154,15 @@ class FsFile:
 
         return self._rpc._bridge.run(self._async.stat())
 
-    def flush(self) -> None:
-        """Flush the file's internal buffer."""
+    def sync(self) -> None:
+        """Flushes any pending data and metadata operations of the given file stream to disk."""
 
-        return self._rpc._bridge.run(self._async.flush())
+        return self._rpc._bridge.run(self._async.sync())
 
-    def syncData(self) -> None:
+    def sync_data(self) -> None:
         """Sync the file's data to disk."""
 
-        return self._rpc._bridge.run(self._async.syncData())
+        return self._rpc._bridge.run(self._async.sync_data())
 
     def utime(self, atime: int, mtime: int) -> None:
         """Update the file's access and modification times."""
