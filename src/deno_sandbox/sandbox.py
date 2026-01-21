@@ -98,7 +98,7 @@ class SandboxApi:
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield Sandbox(self._client, rpc, async_handle.id)
+            yield Sandbox(self._client, rpc, async_handle)
         except Exception:
             import sys
 
@@ -115,7 +115,7 @@ class SandboxApi:
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield Sandbox(self._client, rpc, async_handle.id)
+            yield Sandbox(self._client, rpc, async_handle)
         except Exception:
             import sys
 
@@ -253,9 +253,15 @@ class VsCodeOptions(TypedDict):
 
 
 class AsyncSandboxDeno:
-    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
+    def __init__(
+        self,
+        client: AsyncConsoleClient,
+        rpc: AsyncRpcClient,
+        processes: list[AsyncChildProcess],
+    ):
         self._client = client
         self._rpc = rpc
+        self._processes = processes
 
     async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
         """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
@@ -285,7 +291,11 @@ class AsyncSandboxDeno:
 
         result = await self._rpc.call("spawnDeno", params)
 
-        return await AsyncDenoProcess.create(result, self._rpc, opts)
+        process = await AsyncDenoProcess.create(
+            result, self._rpc, opts, self._processes
+        )
+        self._processes.append(process)
+        return process
 
     async def eval(self, code: str) -> Any:
         repl = await self.repl()
@@ -312,15 +322,24 @@ class AsyncSandboxDeno:
 
         result: ProcessSpawnResult = await self._rpc.call("spawnDenoRepl", params)
 
-        return await AsyncDenoRepl.create(result, self._rpc, opts)
+        process = await AsyncDenoRepl.create(result, self._rpc, opts, self._processes)
+        self._processes.append(process)
+        return process
 
 
 class SandboxDeno:
-    def __init__(self, client: ConsoleClient, rpc: RpcClient):
+    def __init__(
+        self,
+        client: ConsoleClient,
+        rpc: RpcClient,
+        processes: list[AsyncChildProcess],
+    ):
         self._client = client
         self._rpc = rpc
 
-        self._async = AsyncSandboxDeno(self._client._async, rpc._async_client)
+        self._async = AsyncSandboxDeno(
+            self._client._async, rpc._async_client, processes
+        )
 
     def run(self, options: DenoRunOptions) -> DenoProcess:
         """
@@ -343,12 +362,13 @@ class AsyncSandbox:
     ):
         self._client = client
         self._rpc = rpc
+        self._processes: list[AsyncChildProcess] = []
 
         self.url: str | None = None
         self.ssh: None = None
         self.id = sandbox_id
         self.fs = AsyncSandboxFs(client, rpc)
-        self.deno = AsyncSandboxDeno(client, rpc)
+        self.deno = AsyncSandboxDeno(client, rpc, self._processes)
         self.env = AsyncSandboxEnv(client, rpc)
 
     @property
@@ -380,7 +400,11 @@ class AsyncSandbox:
             params["stderr"] = "piped"
 
         result: ProcessSpawnResult = await self._rpc.call("spawn", params)
-        return await AsyncChildProcess.create(result, self._rpc, opts)
+        process = await AsyncChildProcess.create(
+            result, self._rpc, opts, self._processes
+        )
+        self._processes.append(process)
+        return process
 
     async def fetch(
         self,
@@ -392,6 +416,10 @@ class AsyncSandbox:
         return await self._rpc.fetch(url, method, headers, redirect)
 
     async def close(self) -> None:
+        # Kill all tracked processes
+        for process in self._processes:
+            await process.kill()
+        self._processes.clear()
         await self._rpc.close()
 
     async def kill(self) -> None:
@@ -458,16 +486,18 @@ class AsyncSandbox:
 
 
 class Sandbox:
-    def __init__(self, client: ConsoleClient, rpc: RpcClient, sandbox_id: str):
+    def __init__(
+        self, client: ConsoleClient, rpc: RpcClient, async_sandbox: AsyncSandbox
+    ):
         self._client = client
         self._rpc = rpc
-        self._async = AsyncSandbox(self._client._async, rpc._async_client, sandbox_id)
+        self._async = async_sandbox
 
         self.url: str | None = None
         self.ssh: None = None
-        self.id = sandbox_id
+        self.id = async_sandbox.id
         self.fs = SandboxFs(client, rpc)
-        self.deno = SandboxDeno(client, rpc)
+        self.deno = SandboxDeno(client, rpc, self._async._processes)
         self.env = SandboxEnv(client, rpc)
 
     @property
