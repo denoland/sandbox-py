@@ -184,11 +184,14 @@ class AsyncSandboxApi:
         if sandbox_id is None:
             raise Exception("Sandbox ID not found in response headers")
 
+        sandbox = None
         try:
             rpc = AsyncRpcClient(transport)
-            yield AsyncSandbox(self._client, rpc, sandbox_id)
+            sandbox = AsyncSandbox(self._client, rpc, sandbox_id)
+            yield sandbox
         finally:
-            await transport.close()
+            if sandbox is not None:
+                await sandbox.close()
 
     @asynccontextmanager
     async def connect(
@@ -210,11 +213,14 @@ class AsyncSandboxApi:
             },
         )
 
+        sandbox = None
         try:
             rpc = AsyncRpcClient(transport)
-            yield AsyncSandbox(self._client, rpc, sandbox_id)
+            sandbox = AsyncSandbox(self._client, rpc, sandbox_id)
+            yield sandbox
         finally:
-            await transport.close()
+            if sandbox is not None:
+                await sandbox.close()
 
     async def list(
         self, options: Optional[SandboxListOptions] = None
