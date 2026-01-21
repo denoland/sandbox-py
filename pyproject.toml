@@ -4,7 +4,7 @@ version = "0.5.0"
 description = "Deno Sandbox Python SDK"
 readme = "README.md"
 authors = [{ name = "The Deno Team", email = "support@deno.com" }]
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.28.1",
     "typing-extensions>=4.15.0",

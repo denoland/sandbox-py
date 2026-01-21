@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional, TypedDict, cast
+from typing import Any, Generic, Literal, Optional, TypedDict, TypeVar, cast
 import httpx
 
 from .api_types_generated import (
@@ -24,6 +26,9 @@ from .bridge import AsyncBridge
 from .options import InternalOptions
 from .utils import convert_to_snake_case, parse_link_header
 
+T = TypeVar("T")
+O = TypeVar("O")
+
 
 class Revision(RevisionWithoutTimelines):
     timelines: list[Timeline]
@@ -40,7 +45,7 @@ class ExposeHTTPResult(TypedDict):
     domain: str
 
 
-class AsyncPaginatedList[T, O]:
+class AsyncPaginatedList(Generic[T, O]):
     def __init__(
         self,
         client: AsyncConsoleClient,
@@ -88,7 +93,7 @@ class AsyncPaginatedList[T, O]:
         return next_page
 
 
-class PaginatedList[T, O]:
+class PaginatedList(Generic[T, O]):
     def __init__(
         self,
         bridge: AsyncBridge,
@@ -187,7 +192,7 @@ class AsyncConsoleClient:
         response = await self._request("DELETE", req_url)
         return response
 
-    async def get_paginated[T, O](
+    async def get_paginated(
         self,
         path: str,
         cursor: Optional[str],
@@ -379,7 +384,7 @@ class ConsoleClient:
         self._async = AsyncConsoleClient(options)
         self._bridge = bridge
 
-    def get_paginated[T, O](
+    def get_paginated(
         self, path: str, cursor: Optional[str], params: Optional[O] = None
     ) -> PaginatedList[T, O]:
         async_paginated = self._bridge.run(
