@@ -17,7 +17,7 @@ from typing import (
 )
 from typing_extensions import Literal, NotRequired, TypeAlias
 
-from .stream import stream_data
+from .stream import Streamable, complete_stream, start_stream, stream_data
 
 from .api_generated import (
     AsyncSandboxEnv,
@@ -281,7 +281,11 @@ class AsyncSandboxDeno:
         self._rpc = rpc
         self._processes = processes
 
-    async def run(self, options: DenoRunOptions) -> AsyncDenoProcess:
+    async def run(
+        self,
+        options: DenoRunOptions,
+        stdin: Optional[Streamable] = None,
+    ) -> AsyncDenoProcess:
         """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
 
         params = {
@@ -297,6 +301,13 @@ class AsyncSandboxDeno:
         if "code" in params and "extension" not in params:
             params["extension"] = "ts"
 
+        # If stdin data is provided, start stream first (but don't send data yet)
+        stdin_writer = None
+        if stdin is not None:
+            params["stdin"] = "piped"
+            stdin_stream_id, stdin_writer = await start_stream(self._rpc)
+            params["stdinStreamId"] = stdin_stream_id
+
         opts = RemoteProcessOptions(
             stdout_inherit=params["stdout"] == "inherit",
             stderr_inherit=params["stderr"] == "inherit",
@@ -308,6 +319,10 @@ class AsyncSandboxDeno:
             params["stderr"] = "piped"
 
         result = await self._rpc.call("spawnDeno", params)
+
+        # Now that process is spawned, complete the stdin stream
+        if stdin_writer is not None and stdin is not None:
+            await complete_stream(stdin_writer, stdin)
 
         process = await AsyncDenoProcess.create(
             result, self._rpc, opts, self._processes
@@ -359,11 +374,15 @@ class SandboxDeno:
             self._client._async, rpc._async_client, processes
         )
 
-    def run(self, options: DenoRunOptions) -> DenoProcess:
+    def run(
+        self,
+        options: DenoRunOptions,
+        stdin: Optional[Union[Iterable[bytes], BinaryIO]] = None,
+    ) -> DenoProcess:
         """
         Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit.
         """
-        async_deno = self._client._bridge.run(self._async.run(options))
+        async_deno = self._client._bridge.run(self._async.run(options, stdin))
         return DenoProcess(self._rpc, async_deno)
 
     def eval(self, code: str) -> Any:
@@ -394,7 +413,10 @@ class AsyncSandbox:
         return self._rpc._transport.closed
 
     async def spawn(
-        self, command: str, options: Optional[SpawnOptions] = None
+        self,
+        command: str,
+        options: Optional[SpawnOptions] = None,
+        stdin: Optional[Streamable] = None,
     ) -> AsyncChildProcess:
         params = {
             "command": command,
@@ -407,6 +429,13 @@ class AsyncSandbox:
                 if value is not None:
                     params[to_snake_case(key)] = value
 
+        # If stdin data is provided, start stream first (but don't send data yet)
+        stdin_writer = None
+        if stdin is not None:
+            params["stdin"] = "piped"
+            stdin_stream_id, stdin_writer = await start_stream(self._rpc)
+            params["stdinStreamId"] = stdin_stream_id
+
         opts = RemoteProcessOptions(
             stdout_inherit=params["stdout"] == "inherit",
             stderr_inherit=params["stderr"] == "inherit",
@@ -418,6 +447,11 @@ class AsyncSandbox:
             params["stderr"] = "piped"
 
         result: ProcessSpawnResult = await self._rpc.call("spawn", params)
+
+        # Now that process is spawned, complete the stdin stream
+        if stdin_writer is not None and stdin is not None:
+            await complete_stream(stdin_writer, stdin)
+
         process = await AsyncChildProcess.create(
             result, self._rpc, opts, self._processes
         )
@@ -523,9 +557,14 @@ class Sandbox:
         return self._rpc._async_client._transport.closed
 
     def spawn(
-        self, command: str, options: Optional[SpawnOptions] = None
+        self,
+        command: str,
+        options: Optional[SpawnOptions] = None,
+        stdin: Optional[Union[Iterable[bytes], BinaryIO]] = None,
     ) -> ChildProcess:
-        async_child = self._client._bridge.run(self._async.spawn(command, options))
+        async_child = self._client._bridge.run(
+            self._async.spawn(command, options, stdin)
+        )
         return ChildProcess(self._rpc, async_child)
 
     def fetch(

@@ -161,3 +161,148 @@ def test_write_file_large_stream_sync(shared_sandbox):
     content = sb.fs.read_file("test_large_sync.txt")
     assert len(content) == 102400
     assert content == b"x" * 102400
+
+
+# stdin streaming tests for spawn
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_spawn_stdin_stream_async(async_shared_sandbox):
+    """Test spawn with stdin stream (async)."""
+    sb = async_shared_sandbox
+
+    def stdin_chunks():
+        yield b"hello from stdin"
+
+    p = await sb.spawn(
+        "cat",
+        {"stdout": "piped", "stderr": "piped"},
+        stdin=stdin_chunks(),
+    )
+
+    status = await p.wait()
+    assert status["code"] == 0
+
+    stdout = await p.stdout.read(-1)
+    assert stdout == b"hello from stdin"
+
+
+def test_spawn_stdin_stream_sync(shared_sandbox):
+    """Test spawn with stdin stream (sync)."""
+    sb = shared_sandbox
+
+    def stdin_chunks():
+        yield b"hello from stdin sync"
+
+    p = sb.spawn(
+        "cat",
+        {"stdout": "piped", "stderr": "piped"},
+        stdin=stdin_chunks(),
+    )
+
+    status = p.wait()
+    assert status["code"] == 0
+
+    stdout = p.stdout.read(-1)
+    assert stdout == b"hello from stdin sync"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_spawn_stdin_file_object_async(async_shared_sandbox):
+    """Test spawn with stdin as file-like object (async)."""
+    sb = async_shared_sandbox
+
+    file_obj = io.BytesIO(b"stdin from file object")
+
+    p = await sb.spawn(
+        "cat",
+        {"stdout": "piped", "stderr": "piped"},
+        stdin=file_obj,
+    )
+
+    status = await p.wait()
+    assert status["code"] == 0
+
+    stdout = await p.stdout.read(-1)
+    assert stdout == b"stdin from file object"
+
+
+def test_spawn_stdin_file_object_sync(shared_sandbox):
+    """Test spawn with stdin as file-like object (sync)."""
+    sb = shared_sandbox
+
+    file_obj = io.BytesIO(b"stdin from file object sync")
+
+    p = sb.spawn(
+        "cat",
+        {"stdout": "piped", "stderr": "piped"},
+        stdin=file_obj,
+    )
+
+    status = p.wait()
+    assert status["code"] == 0
+
+    stdout = p.stdout.read(-1)
+    assert stdout == b"stdin from file object sync"
+
+
+# stdin streaming tests for deno.run
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_deno_run_stdin_stream_async(async_shared_sandbox):
+    """Test deno.run with stdin stream (async)."""
+    sb = async_shared_sandbox
+
+    def stdin_chunks():
+        yield b"deno stdin test"
+
+    p = await sb.deno.run(
+        {
+            "code": """
+const buf = new Uint8Array(1024);
+const n = await Deno.stdin.read(buf);
+if (n) {
+    await Deno.stdout.write(buf.subarray(0, n));
+}
+""",
+            "stdout": "piped",
+            "stderr": "piped",
+        },
+        stdin=stdin_chunks(),
+    )
+
+    status = await p.wait()
+    assert status["code"] == 0
+
+    stdout = await p.stdout.read(-1)
+    assert stdout == b"deno stdin test"
+
+
+def test_deno_run_stdin_stream_sync(shared_sandbox):
+    """Test deno.run with stdin stream (sync)."""
+    sb = shared_sandbox
+
+    def stdin_chunks():
+        yield b"deno stdin test sync"
+
+    p = sb.deno.run(
+        {
+            "code": """
+const buf = new Uint8Array(1024);
+const n = await Deno.stdin.read(buf);
+if (n) {
+    await Deno.stdout.write(buf.subarray(0, n));
+}
+""",
+            "stdout": "piped",
+            "stderr": "piped",
+        },
+        stdin=stdin_chunks(),
+    )
+
+    status = p.wait()
+    assert status["code"] == 0
+
+    stdout = p.stdout.read(-1)
+    assert stdout == b"deno stdin test sync"
