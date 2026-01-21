@@ -54,34 +54,54 @@ async def stream_data(
     Sends: start → enqueue(s) → end
     On error: sends error message then re-raises
     """
-    stream_id = rpc.next_stream_id()
-    writer = AsyncStreamWriter(rpc, stream_id)
+    stream_id, writer = await start_stream(rpc)
 
     try:
-        await writer.start()
-
-        if hasattr(data, "read"):
-            # File-like object
-            while True:
-                chunk = data.read(chunk_size)  # type: ignore[union-attr]
-                if not chunk:
-                    break
-                await writer.enqueue(chunk)
-        elif hasattr(data, "__aiter__"):
-            # Async iterable
-            async for chunk in data:  # type: ignore[union-attr]
-                await writer.enqueue(chunk)
-        else:
-            # Sync iterable
-            for chunk in data:  # type: ignore[union-attr]
-                await writer.enqueue(chunk)
-
-        await writer.end()
+        await complete_stream(writer, data, chunk_size)
         return stream_id
 
     except Exception as e:
         await writer.error(str(e))
         raise
+
+
+async def start_stream(rpc: AsyncRpcClient) -> tuple[int, AsyncStreamWriter]:
+    """
+    Start a stream and return (stream_id, writer).
+
+    Only sends the start notification. Call complete_stream() to send data and end.
+    """
+    stream_id = rpc.next_stream_id()
+    writer = AsyncStreamWriter(rpc, stream_id)
+    await writer.start()
+    return stream_id, writer
+
+
+async def complete_stream(
+    writer: AsyncStreamWriter, data: Streamable, chunk_size: int = 64 * 1024
+) -> None:
+    """
+    Complete a stream by sending all data and the end notification.
+
+    Should be called after start_stream() and after any RPC calls that need the stream_id.
+    """
+    if hasattr(data, "read"):
+        # File-like object
+        while True:
+            chunk = data.read(chunk_size)  # type: ignore[union-attr]
+            if not chunk:
+                break
+            await writer.enqueue(chunk)
+    elif hasattr(data, "__aiter__"):
+        # Async iterable
+        async for chunk in data:  # type: ignore[union-attr]
+            await writer.enqueue(chunk)
+    else:
+        # Sync iterable
+        for chunk in data:  # type: ignore[union-attr]
+            await writer.enqueue(chunk)
+
+    await writer.end()
 
 
 def is_streamable(obj: object) -> bool:
