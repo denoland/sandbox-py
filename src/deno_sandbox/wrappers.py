@@ -226,6 +226,7 @@ class AsyncChildProcess:
         rpc: AsyncRpcClient,
         _stdout_task: Optional[asyncio.Task] = None,
         _stderr_task: Optional[asyncio.Task] = None,
+        _process_list: Optional[list["AsyncChildProcess"]] = None,
     ):
         self.pid = pid
         self.stdout = stdout
@@ -235,6 +236,12 @@ class AsyncChildProcess:
         self._rpc = rpc
         self._stdout_task = _stdout_task
         self._stderr_task = _stderr_task
+        self._process_list = _process_list
+
+    def _remove_from_list(self) -> None:
+        """Remove this process from the tracking list."""
+        if self._process_list is not None and self in self._process_list:
+            self._process_list.remove(self)
 
     @classmethod
     async def create(
@@ -242,12 +249,14 @@ class AsyncChildProcess:
         res: ProcessSpawnResult,
         rpc: AsyncRpcClient,
         options: RemoteProcessOptions,
+        process_list: Optional[list[AsyncChildProcess]] = None,
     ) -> AsyncChildProcess:
-        return create_process_like(cls, res, rpc, options)
+        return create_process_like(cls, res, rpc, options, process_list)
 
     async def wait(self) -> ChildProcessStatus:
         raw = await self._wait_task
         result = cast(ProcessWaitResult, raw)
+        self._remove_from_list()
         return ChildProcessStatus(
             success=result["success"], code=result["code"], signal=result["signal"]
         )
@@ -267,6 +276,8 @@ class AsyncChildProcess:
             self._stdout_task.cancel()
         if self._stderr_task is not None:
             self._stderr_task.cancel()
+
+        self._remove_from_list()
 
     async def __aenter__(self):
         return self
@@ -300,12 +311,14 @@ def create_process_like[T](
             AsyncRpcClient,
             Optional[asyncio.Task],
             Optional[asyncio.Task],
+            Optional[list[AsyncChildProcess]],
         ],
         T,
     ],
     res: ProcessSpawnResult,
     rpc: AsyncRpcClient,
     options: RemoteProcessOptions,
+    process_list: Optional[list[AsyncChildProcess]] = None,
 ) -> T:
     pid = res["pid"]
 
@@ -327,7 +340,9 @@ def create_process_like[T](
         stderr_coro = _pipe_stream(stderr, sys.stderr.buffer)
         stderr_task = rpc._loop.create_task(stderr_coro)
 
-    instance = cls(pid, stdout, stderr, wait_task, rpc, stdout_task, stderr_task)
+    instance = cls(
+        pid, stdout, stderr, wait_task, rpc, stdout_task, stderr_task, process_list
+    )
 
     return instance
 
@@ -386,8 +401,11 @@ class AsyncDenoProcess(AsyncChildProcess):
         rpc: AsyncRpcClient,
         stdout_task: Optional[asyncio.Task],
         stderr_task: Optional[asyncio.Task],
+        process_list: Optional[list[AsyncChildProcess]] = None,
     ):
-        super().__init__(pid, stdout, stderr, wait_task, rpc, stdout_task, stderr_task)
+        super().__init__(
+            pid, stdout, stderr, wait_task, rpc, stdout_task, stderr_task, process_list
+        )
         self._listening_task: asyncio.Task | None = None
 
     @classmethod
@@ -396,8 +414,9 @@ class AsyncDenoProcess(AsyncChildProcess):
         res: ProcessSpawnResult,
         rpc: AsyncRpcClient,
         options: RemoteProcessOptions,
+        process_list: Optional[list[AsyncChildProcess]] = None,
     ) -> AsyncDenoProcess:
-        p = create_process_like(cls, res, rpc, options)
+        p = create_process_like(cls, res, rpc, options, process_list)
 
         p._listening_task = rpc._loop.create_task(
             rpc.call("denoHttpWait", {"pid": p.pid})
@@ -467,8 +486,9 @@ class AsyncDenoRepl(AsyncChildProcess):
         res: ProcessSpawnResult,
         rpc: AsyncRpcClient,
         options: RemoteProcessOptions,
+        process_list: Optional[list[AsyncChildProcess]] = None,
     ) -> AsyncDenoRepl:
-        return create_process_like(cls, res, rpc, options)
+        return create_process_like(cls, res, rpc, options, process_list)
 
     async def eval(self, code: str) -> str:
         """Evaluate code in the REPL and return the output."""
@@ -495,6 +515,7 @@ class AsyncDenoRepl(AsyncChildProcess):
             self._stdout_task.cancel()
         if self._stderr_task is not None:
             self._stderr_task.cancel()
+        self._remove_from_list()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
