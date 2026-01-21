@@ -27,10 +27,8 @@ from .api_types_generated import (
     WalkOptions,
     WalkEntry,
     ExpandGlobOptions,
-    FsFileHandle,
     MakeTempDirOptions,
     MakeTempFileOptions,
-    FsOpenOptions,
     SymlinkOptions,
 )
 
@@ -468,15 +466,6 @@ class SandboxFs:
 
         return result
 
-    def create(self, path: str) -> FsFileHandle:
-        """Create a new empty file at the specified path."""
-
-        params = {"path": path}
-        result = self._rpc.call("create", params)
-
-        raw_result = convert_to_snake_case(result)
-        return cast(FsFileHandle, raw_result)
-
     def link(self, target: str, path: str) -> None:
         """Create a hard link pointing to an existing file."""
 
@@ -513,18 +502,6 @@ class SandboxFs:
         result = self._rpc.call("makeTempFile", params)
 
         return result
-
-    def open(self, path: str, options: Optional[FsOpenOptions] = None) -> FsFileHandle:
-        """Open a file and return a file descriptor."""
-
-        params = {"path": path}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = self._rpc.call("open", params)
-
-        raw_result = convert_to_snake_case(result)
-        return cast(FsFileHandle, raw_result)
 
     def read_link(self, path: str) -> str:
         """Read the target of a symbolic link."""
@@ -726,15 +703,6 @@ class AsyncSandboxFs:
 
         return result
 
-    async def create(self, path: str) -> FsFileHandle:
-        """Create a new empty file at the specified path."""
-
-        params = {"path": path}
-        result = await self._rpc.call("create", params)
-
-        raw_result = convert_to_snake_case(result)
-        return cast(FsFileHandle, raw_result)
-
     async def link(self, target: str, path: str) -> None:
         """Create a hard link pointing to an existing file."""
 
@@ -773,20 +741,6 @@ class AsyncSandboxFs:
         result = await self._rpc.call("makeTempFile", params)
 
         return result
-
-    async def open(
-        self, path: str, options: Optional[FsOpenOptions] = None
-    ) -> FsFileHandle:
-        """Open a file and return a file descriptor."""
-
-        params = {"path": path}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = await self._rpc.call("open", params)
-
-        raw_result = convert_to_snake_case(result)
-        return cast(FsFileHandle, raw_result)
 
     async def read_link(self, path: str) -> str:
         """Read the target of a symbolic link."""
