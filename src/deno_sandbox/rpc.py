@@ -51,6 +51,7 @@ class AsyncRpcClient:
         self._pending_processes: Dict[int, asyncio.StreamReader] = {}
         self.__loop: asyncio.AbstractEventLoop | None = None
         self._signal_id = 0
+        self._stream_id = 0
 
     @property
     def _loop(self) -> asyncio.AbstractEventLoop:
@@ -60,6 +61,16 @@ class AsyncRpcClient:
 
     async def close(self):
         await self._transport.close()
+
+    async def send_notification(self, method: str, params: dict[str, Any]) -> None:
+        """Send a notification (no response expected)."""
+        payload = {"method": method, "params": params, "jsonrpc": "2.0"}
+        await self._transport.send(json.dumps(payload))
+
+    def next_stream_id(self) -> int:
+        """Get next stream ID."""
+        self._stream_id += 1
+        return self._stream_id
 
     async def call(self, method: str, params: Mapping[str, Any]) -> Any:
         if self._listen_task is None or self._listen_task.done():
