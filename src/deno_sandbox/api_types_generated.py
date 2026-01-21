@@ -617,6 +617,10 @@ class ExpandGlobOptions(TypedDict):
     """Whether the glob matching should be case insensitive. Default: false."""
 
 
+class FsFileHandle(TypedDict):
+    file_handle_id: int
+
+
 class MakeTempDirOptions(TypedDict):
     dir: NotRequired[str | None]
     prefix: NotRequired[str | None]

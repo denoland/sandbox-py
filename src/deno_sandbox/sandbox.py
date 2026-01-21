@@ -14,13 +14,15 @@ from typing_extensions import Literal
 
 from .api_generated import (
     AsyncSandboxEnv,
-    AsyncSandboxFs,
+    AsyncSandboxFs as AsyncSandboxFsGenerated,
     SandboxEnv,
-    SandboxFs,
+    SandboxFs as SandboxFsGenerated,
 )
 from .api_types_generated import (
     DenoReplOptions,
     DenoRunOptions,
+    FsFileHandle,
+    FsOpenOptions,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
@@ -39,16 +41,23 @@ from .rpc import AsyncRpcClient, RpcClient
 from .transport import (
     WebSocketTransport,
 )
-from .utils import to_camel_case, to_snake_case
+from .utils import (
+    convert_to_camel_case,
+    convert_to_snake_case,
+    to_camel_case,
+    to_snake_case,
+)
 from .wrappers import (
     AsyncChildProcess,
     AsyncDenoProcess,
     AsyncDenoRepl,
     AsyncFetchResponse,
+    AsyncFsFile,
     ChildProcess,
     DenoProcess,
     DenoRepl,
     FetchResponse,
+    FsFile,
     ProcessSpawnResult,
     RemoteProcessOptions,
 )
@@ -560,6 +569,66 @@ class Sandbox:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._client._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
+
+
+class AsyncSandboxFs(AsyncSandboxFsGenerated):
+    """Filesystem operations inside the sandbox."""
+
+    async def create(self, path: str) -> AsyncFsFile:
+        """Create a new, empty file at the specified path."""
+
+        params = {"path": path}
+        result = await self._rpc.call("create", params)
+
+        raw_result = convert_to_snake_case(result)
+        handle = cast(FsFileHandle, raw_result)
+
+        return AsyncFsFile(self._rpc, handle["file_handle_id"])
+
+    async def open(
+        self, path: str, options: Optional[FsOpenOptions] = None
+    ) -> AsyncFsFile:
+        """Open a file and return a file descriptor."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = await self._rpc.call("open", params)
+
+        raw_result = convert_to_snake_case(result)
+        handle = cast(FsFileHandle, raw_result)
+
+        return AsyncFsFile(self._rpc, handle["file_handle_id"])
+
+
+class SandboxFs(SandboxFsGenerated):
+    """Filesystem operations inside the sandbox."""
+
+    def create(self, path: str) -> FsFile:
+        """Create a new, empty file at the specified path."""
+
+        params = {"path": path}
+        result = self._rpc.call("create", params)
+
+        raw_result = convert_to_snake_case(result)
+        handle = cast(FsFileHandle, raw_result)
+
+        return FsFile(self._rpc, handle["file_handle_id"])
+
+    def open(self, path: str, options: Optional[FsOpenOptions] = None) -> FsFile:
+        """Open a file and return a file descriptor."""
+
+        params = {"path": path}
+        if options is not None:
+            params["options"] = convert_to_camel_case(options)
+
+        result = self._rpc.call("open", params)
+
+        raw_result = convert_to_snake_case(result)
+        handle = cast(FsFileHandle, raw_result)
+
+        return FsFile(self._rpc, handle["file_handle_id"])
 
 
 class AsyncVsCode:
