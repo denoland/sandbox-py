@@ -648,9 +648,7 @@ class AsyncSandboxFs(AsyncSandboxFsGenerated):
 class SandboxFs(SandboxFsGenerated):
     """Filesystem operations inside the sandbox."""
 
-    def read_file(
-        self, path: str, options: Optional[ReadFileOptions] = None
-    ) -> bytes:
+    def read_file(self, path: str, options: Optional[ReadFileOptions] = None) -> bytes:
         """Reads the entire contents of a file as bytes."""
 
         params: dict[str, Any] = {"path": path}

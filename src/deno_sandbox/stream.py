@@ -86,6 +86,8 @@ async def stream_data(
 
 def is_streamable(obj: object) -> bool:
     """Check if object is streamable (not bytes)."""
-    return hasattr(obj, "read") or hasattr(obj, "__aiter__") or (
-        hasattr(obj, "__iter__") and not isinstance(obj, (bytes, str, dict, list))
+    return (
+        hasattr(obj, "read")
+        or hasattr(obj, "__aiter__")
+        or (hasattr(obj, "__iter__") and not isinstance(obj, (bytes, str, dict, list)))
     )
