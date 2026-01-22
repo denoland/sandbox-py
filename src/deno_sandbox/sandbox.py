@@ -43,7 +43,6 @@ from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
-    ConsoleClient,
     ExposeSSHResult,
     PaginatedList,
 )
@@ -192,10 +191,10 @@ class AsyncSandboxApi:
 
 
 class SandboxApi:
-    def __init__(self, client: ConsoleClient, bridge: AsyncBridge):
+    def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
         self._bridge = bridge
         self._client = client
-        self._async = AsyncSandboxApi(self._client._async)
+        self._async = AsyncSandboxApi(client)
 
     @contextmanager
     def create(self, options: Optional[SandboxCreateOptions] = None):
@@ -205,7 +204,7 @@ class SandboxApi:
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield Sandbox(self._client, rpc, async_handle)
+            yield Sandbox(self._client, self._bridge, rpc, async_handle)
         except Exception:
             import sys
 
@@ -222,7 +221,7 @@ class SandboxApi:
         rpc = RpcClient(async_handle._rpc, self._bridge)
 
         try:
-            yield Sandbox(self._client, rpc, async_handle)
+            yield Sandbox(self._client, self._bridge, rpc, async_handle)
         except Exception:
             import sys
 
@@ -265,11 +264,9 @@ class VsCodeOptions(TypedDict):
 class AsyncSandboxDeno:
     def __init__(
         self,
-        client: AsyncConsoleClient,
         rpc: AsyncRpcClient,
         processes: list[AsyncChildProcess],
     ):
-        self._client = client
         self._rpc = rpc
         self._processes = processes
 
@@ -355,16 +352,14 @@ class AsyncSandboxDeno:
 class SandboxDeno:
     def __init__(
         self,
-        client: ConsoleClient,
+        bridge: AsyncBridge,
         rpc: RpcClient,
         processes: list[AsyncChildProcess],
     ):
-        self._client = client
+        self._bridge = bridge
         self._rpc = rpc
 
-        self._async = AsyncSandboxDeno(
-            self._client._async, rpc._async_client, processes
-        )
+        self._async = AsyncSandboxDeno(rpc._async_client, processes)
 
     def run(
         self,
@@ -374,14 +369,14 @@ class SandboxDeno:
         """
         Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit.
         """
-        async_deno = self._client._bridge.run(self._async.run(options, stdin))
+        async_deno = self._bridge.run(self._async.run(options, stdin))
         return DenoProcess(self._rpc, async_deno)
 
     def eval(self, code: str) -> Any:
-        return self._client._bridge.run(self._async.eval(code))
+        return self._bridge.run(self._async.eval(code))
 
     def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
-        async_repl = self._client._bridge.run(self._async.repl(options))
+        async_repl = self._bridge.run(self._async.repl(options))
         return DenoRepl(self._rpc, async_repl)
 
 
@@ -396,9 +391,9 @@ class AsyncSandbox:
         self.url: str | None = None
         self.ssh: None = None
         self.id = sandbox_id
-        self.fs = AsyncSandboxFs(client, rpc)
-        self.deno = AsyncSandboxDeno(client, rpc, self._processes)
-        self.env = AsyncSandboxEnv(client, rpc)
+        self.fs = AsyncSandboxFs(rpc)
+        self.deno = AsyncSandboxDeno(rpc, self._processes)
+        self.env = AsyncSandboxEnv(rpc)
 
     @property
     def closed(self) -> bool:
@@ -545,18 +540,23 @@ class AsyncSandbox:
 
 class Sandbox:
     def __init__(
-        self, client: ConsoleClient, rpc: RpcClient, async_sandbox: AsyncSandbox
+        self,
+        client: AsyncConsoleClient,
+        bridge: AsyncBridge,
+        rpc: RpcClient,
+        async_sandbox: AsyncSandbox,
     ):
         self._client = client
+        self._bridge = bridge
         self._rpc = rpc
         self._async = async_sandbox
 
         self.url: str | None = None
         self.ssh: None = None
         self.id = async_sandbox.id
-        self.fs = SandboxFs(client, rpc)
-        self.deno = SandboxDeno(client, rpc, self._async._processes)
-        self.env = SandboxEnv(client, rpc)
+        self.fs = SandboxFs(bridge, rpc)
+        self.deno = SandboxDeno(bridge, rpc, self._async._processes)
+        self.env = SandboxEnv(rpc)
 
     @property
     def closed(self) -> bool:
@@ -568,9 +568,7 @@ class Sandbox:
         options: Optional[SpawnOptions] = None,
         stdin: Optional[Union[Iterable[bytes], BinaryIO]] = None,
     ) -> ChildProcess:
-        async_child = self._client._bridge.run(
-            self._async.spawn(command, options, stdin)
-        )
+        async_child = self._bridge.run(self._async.spawn(command, options, stdin))
         return ChildProcess(self._rpc, async_child)
 
     def fetch(
@@ -583,10 +581,10 @@ class Sandbox:
         return self._rpc.fetch(url, method, headers, redirect, None)
 
     def close(self) -> None:
-        self._client._bridge.run(self._async.close())
+        self._bridge.run(self._async.close())
 
     def kill(self) -> None:
-        self._client._bridge.run(self._async.kill())
+        self._bridge.run(self._async.kill())
 
     def extend_timeout(self, additional_s: int) -> datetime:
         """Request to extend the timeout of the sandbox by the specified duration.
@@ -595,7 +593,7 @@ class Sandbox:
         Please note the extension is not guranteed to be the same as requested time.
         You should rely on the returned Date value to know the exact extension time.
         """
-        return self._client._bridge.run(self._async.extend_timeout(additional_s))
+        return self._bridge.run(self._async.extend_timeout(additional_s))
 
     def expose_http(self, port: Optional[int] = None, pid: Optional[int] = None) -> str:
         """Publicly expose a HTTP service via a publicly routeable URL.
@@ -607,7 +605,7 @@ class Sandbox:
         An exposed service can either be a service listening on an arbitrary HTTP
         port, or a JavaScript runtime that can handle HTTP requests.
         """
-        return self._client._bridge.run(self._async.expose_http(port=port, pid=pid))
+        return self._bridge.run(self._async.expose_http(port=port, pid=pid))
 
     def expose_ssh(self) -> ExposeSSHResult:
         """Expose an isolate over SSH, allowing access to the isolate's shell.
@@ -616,13 +614,13 @@ class Sandbox:
         with a randomly generated, unique identifier. Anyone with knowledge of the 'username' can
         connect to the isolate's shell without further authentication.
         """
-        return self._client._bridge.run(self._async.expose_ssh())
+        return self._bridge.run(self._async.expose_ssh())
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._client._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
+        self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
 
 
 class AsyncVsCode:

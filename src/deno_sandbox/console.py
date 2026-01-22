@@ -212,19 +212,4 @@ class AsyncConsoleClient:
         await self.close()
 
 
-class ConsoleClient:
-    def __init__(self, options: InternalOptions, bridge: AsyncBridge):
-        self._async = AsyncConsoleClient(options)
-        self._bridge = bridge
-
-    def close(self):
-        self._bridge.run(self._async.close())
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
-
-
-__all__ = ["AsyncConsoleClient", "ConsoleClient"]
+__all__ = ["AsyncConsoleClient"]

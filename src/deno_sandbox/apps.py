@@ -10,9 +10,9 @@ from .api_types_generated import (
     AppUpdate,
 )
 from .utils import convert_to_snake_case
+from .bridge import AsyncBridge
 from .console import (
     PaginatedList,
-    ConsoleClient,
     AsyncConsoleClient,
     AsyncPaginatedList,
 )
@@ -56,30 +56,31 @@ class AsyncApps:
 
 
 class Apps:
-    def __init__(self, client: ConsoleClient):
+    def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
         self._client = client
-        self._async = AsyncApps(client._async)
+        self._bridge = bridge
+        self._async = AsyncApps(client)
 
     def get(self, id_or_slug: str) -> App | None:
         """Get an app by its ID or slug."""
-        return self._client._bridge.run(self._async.get(id_or_slug))
+        return self._bridge.run(self._async.get(id_or_slug))
 
     def list(
         self, options: Optional[AppListOptions] = None
     ) -> PaginatedList[App, AppListOptions]:
         """List apps of an org."""
 
-        paginated = self._client._bridge.run(self._async.list(options))
-        return PaginatedList(self._client._bridge, paginated)
+        paginated = self._bridge.run(self._async.list(options))
+        return PaginatedList(self._bridge, paginated)
 
     def create(self, options: Optional[AppInit] = None) -> App:
         """Create a new app."""
-        return self._client._bridge.run(self._async.create(options))
+        return self._bridge.run(self._async.create(options))
 
     def update(self, app: str, update: AppUpdate) -> App:
         """Update an existing app."""
-        return self._client._bridge.run(self._async.update(app, update))
+        return self._bridge.run(self._async.update(app, update))
 
     def delete(self, app: str) -> None:
         """Delete an app by its ID or slug."""
-        self._client._bridge.run(self._async.delete(app))
+        self._bridge.run(self._async.delete(app))

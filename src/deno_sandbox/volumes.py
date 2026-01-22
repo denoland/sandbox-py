@@ -12,10 +12,10 @@ from .api_types_generated import (
 )
 from .utils import convert_to_snake_case
 
+from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
-    ConsoleClient,
     PaginatedList,
 )
 
@@ -66,30 +66,31 @@ class AsyncVolumes:
 
 
 class Volumes:
-    def __init__(self, client: ConsoleClient):
+    def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
         self._client = client
-        self._async = AsyncVolumes(client._async)
+        self._bridge = bridge
+        self._async = AsyncVolumes(client)
 
     def create(self, options: VolumeInit) -> Volume:
         """Create a new volume."""
-        return self._client._bridge.run(self._async.create(options))
+        return self._bridge.run(self._async.create(options))
 
     def get(self, id_or_slug: str) -> Volume | None:
         """Get volume info by ID or slug."""
-        return self._client._bridge.run(self._async.get(id_or_slug))
+        return self._bridge.run(self._async.get(id_or_slug))
 
     def list(
         self, options: Optional[VolumeListOptions] = None
     ) -> PaginatedList[Volume, VolumeListOptions]:
         """List volumes."""
 
-        paginated = self._client._bridge.run(self._async.list(options))
-        return PaginatedList(self._client._bridge, paginated)
+        paginated = self._bridge.run(self._async.list(options))
+        return PaginatedList(self._bridge, paginated)
 
     def delete(self, id_or_slug: str) -> None:
         """Delete volume by ID or slug."""
-        self._client._bridge.run(self._async.delete(id_or_slug))
+        self._bridge.run(self._async.delete(id_or_slug))
 
     def snapshot(self, id_or_slug: str, init: SnapshotInit) -> Snapshot:
         """Create a snapshot of a volume by ID or slug."""
-        return self._client._bridge.run(self._async.snapshot(id_or_slug, init))
+        return self._bridge.run(self._async.snapshot(id_or_slug, init))

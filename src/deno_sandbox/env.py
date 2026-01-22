@@ -3,13 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .console import AsyncConsoleClient, ConsoleClient
     from .rpc import AsyncRpcClient, RpcClient
 
 
 class AsyncSandboxEnv:
-    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
-        self._client = client
+    def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
     async def get(self, key: str) -> str:
@@ -42,8 +40,7 @@ class AsyncSandboxEnv:
 
 
 class SandboxEnv:
-    def __init__(self, client: ConsoleClient, rpc: RpcClient):
-        self._client = client
+    def __init__(self, rpc: RpcClient):
         self._rpc = rpc
 
     def get(self, key: str) -> str:

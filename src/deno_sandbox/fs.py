@@ -33,8 +33,8 @@ from .stream import stream_data
 from .utils import convert_to_camel_case, convert_to_snake_case
 
 if TYPE_CHECKING:
-    from .console import AsyncConsoleClient, ConsoleClient
     from .rpc import AsyncRpcClient, RpcClient
+    from .bridge import AsyncBridge
 
 
 class AsyncFsFile:
@@ -190,8 +190,7 @@ class FsFile:
 class AsyncSandboxFs:
     """Filesystem operations inside the sandbox."""
 
-    def __init__(self, client: AsyncConsoleClient, rpc: AsyncRpcClient):
-        self._client = client
+    def __init__(self, rpc: AsyncRpcClient):
         self._rpc = rpc
 
     async def read_file(
@@ -490,8 +489,8 @@ class AsyncSandboxFs:
 class SandboxFs:
     """Filesystem operations inside the sandbox."""
 
-    def __init__(self, client: ConsoleClient, rpc: RpcClient):
-        self._client = client
+    def __init__(self, bridge: AsyncBridge, rpc: RpcClient):
+        self._bridge = bridge
         self._rpc = rpc
 
     def read_file(self, path: str, options: Optional[ReadFileOptions] = None) -> bytes:
@@ -516,12 +515,12 @@ class SandboxFs:
 
         if isinstance(data, bytes):
             # Stream bytes as a single chunk
-            content_stream_id = self._client._bridge.run(
+            content_stream_id = self._bridge.run(
                 stream_data(self._rpc._async_client, iter([data]))
             )
         else:
             # Stream data from iterable/file object
-            content_stream_id = self._client._bridge.run(
+            content_stream_id = self._bridge.run(
                 stream_data(self._rpc._async_client, data)
             )
 
