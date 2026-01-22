@@ -23,11 +23,13 @@ class Revisions:
     def __init__(self, client: ConsoleClient):
         self._client = client
 
-    def get(self, app: str, id: str) -> Revision:
+    def get(self, app: str, id: str) -> Revision | None:
         """Get a revision by its ID for a specific app."""
-
-        result = self._client._revisions_get(app, id)
-
+        result = self._client._bridge.run(
+            self._client._async.get_or_none(f"/api/v2/apps/{app}/revisions/{id}")
+        )
+        if result is None:
+            return None
         raw_result = convert_to_snake_case(result)
         return cast(Revision, raw_result)
 
@@ -35,21 +37,25 @@ class Revisions:
         self, app: str, options: Optional[RevisionListOptions] = None
     ) -> PaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
         """List revisions for a specific app."""
+        from .console import PaginatedList
 
-        result = self._client._revisions_list(app, options)
-
-        return result
+        paginated = self._client._bridge.run(
+            self._client._async.get_paginated(
+                f"/api/v2/apps/{app}/revisions", cursor=None, params=options
+            )
+        )
+        return PaginatedList(self._client._bridge, paginated)
 
 
 class AsyncRevisions:
     def __init__(self, client: AsyncConsoleClient):
         self._client = client
 
-    async def get(self, app: str, id: str) -> Revision:
+    async def get(self, app: str, id: str) -> Revision | None:
         """Get a revision by its ID for a specific app."""
-
-        result = await self._client._revisions_get(app, id)
-
+        result = await self._client.get_or_none(f"/api/v2/apps/{app}/revisions/{id}")
+        if result is None:
+            return None
         raw_result = convert_to_snake_case(result)
         return cast(Revision, raw_result)
 
@@ -57,7 +63,6 @@ class AsyncRevisions:
         self, app: str, options: Optional[RevisionListOptions] = None
     ) -> AsyncPaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
         """List revisions for a specific app."""
-
-        result = await self._client._revisions_list(app, options)
-
-        return result
+        return await self._client.get_paginated(
+            f"/api/v2/apps/{app}/revisions", cursor=None, params=options
+        )

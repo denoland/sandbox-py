@@ -25,10 +25,14 @@ class Timelines:
         self, app: str, options: Optional[TimelineListOptions] = None
     ) -> PaginatedList[Timeline, TimelineListOptions]:
         """List timelines for a specific app."""
+        from .console import PaginatedList
 
-        result = self._client._timelines_list(app, options)
-
-        return result
+        paginated = self._client._bridge.run(
+            self._client._async.get_paginated(
+                f"/api/v2/apps/{app}/timelines", cursor=None, params=options
+            )
+        )
+        return PaginatedList(self._client._bridge, paginated)
 
 
 class AsyncTimelines:
@@ -39,7 +43,6 @@ class AsyncTimelines:
         self, app: str, options: Optional[TimelineListOptions] = None
     ) -> AsyncPaginatedList[Timeline, TimelineListOptions]:
         """List timelines for a specific app."""
-
-        result = await self._client._timelines_list(app, options)
-
-        return result
+        return await self._client.get_paginated(
+            f"/api/v2/apps/{app}/timelines", cursor=None, params=options
+        )
