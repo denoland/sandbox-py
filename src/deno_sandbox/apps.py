@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 from typing_extensions import Optional
 
 from .api_types_generated import (
@@ -10,62 +10,12 @@ from .api_types_generated import (
     AppUpdate,
 )
 from .utils import convert_to_snake_case
-
-if TYPE_CHECKING:
-    from .console import (
-        AsyncConsoleClient,
-        AsyncPaginatedList,
-        ConsoleClient,
-        PaginatedList,
-    )
-
-
-class Apps:
-    def __init__(self, client: ConsoleClient):
-        self._client = client
-
-    def get(self, id_or_slug: str) -> App | None:
-        """Get an app by its ID or slug."""
-        result = self._client._bridge.run(
-            self._client._async.get_or_none(f"/api/v2/apps/{id_or_slug}")
-        )
-        if result is None:
-            return None
-        raw_result = convert_to_snake_case(result)
-        return cast(App, raw_result)
-
-    def list(
-        self, options: Optional[AppListOptions] = None
-    ) -> PaginatedList[App, AppListOptions]:
-        """List apps of an org."""
-        from .console import PaginatedList
-
-        paginated = self._client._bridge.run(
-            self._client._async.get_paginated("/api/v2/apps", cursor=None, params=options)
-        )
-        return PaginatedList(self._client._bridge, paginated)
-
-    def create(self, options: Optional[AppInit] = None) -> App:
-        """Create a new app."""
-        result = self._client._bridge.run(
-            self._client._async.post("/api/v2/apps", options or {})
-        )
-        raw_result = convert_to_snake_case(result)
-        return cast(App, raw_result)
-
-    def update(self, app: str, update: AppUpdate) -> App:
-        """Update an existing app."""
-        result = self._client._bridge.run(
-            self._client._async.patch(f"/api/v2/apps/{app}", update)
-        )
-        raw_result = convert_to_snake_case(result)
-        return cast(App, raw_result)
-
-    def delete(self, app: str) -> None:
-        """Delete an app by its ID or slug."""
-        self._client._bridge.run(
-            self._client._async.delete(f"/api/v2/apps/{app}")
-        )
+from .console import (
+    PaginatedList,
+    ConsoleClient,
+    AsyncConsoleClient,
+    AsyncPaginatedList,
+)
 
 
 class AsyncApps:
@@ -84,7 +34,9 @@ class AsyncApps:
         self, options: Optional[AppListOptions] = None
     ) -> AsyncPaginatedList[App, AppListOptions]:
         """List apps of an org."""
-        return await self._client.get_paginated("/api/v2/apps", cursor=None, params=options)
+        return await self._client.get_paginated(
+            "/api/v2/apps", cursor=None, params=options
+        )
 
     async def create(self, options: Optional[AppInit] = None) -> App:
         """Create a new app."""
@@ -101,3 +53,33 @@ class AsyncApps:
     async def delete(self, app: str) -> None:
         """Delete an app by its ID or slug."""
         await self._client.delete(f"/api/v2/apps/{app}")
+
+
+class Apps:
+    def __init__(self, client: ConsoleClient):
+        self._client = client
+        self._async = AsyncApps(client._async)
+
+    def get(self, id_or_slug: str) -> App | None:
+        """Get an app by its ID or slug."""
+        return self._client._bridge.run(self._async.get(id_or_slug))
+
+    def list(
+        self, options: Optional[AppListOptions] = None
+    ) -> PaginatedList[App, AppListOptions]:
+        """List apps of an org."""
+
+        paginated = self._client._bridge.run(self._async.list(options))
+        return PaginatedList(self._client._bridge, paginated)
+
+    def create(self, options: Optional[AppInit] = None) -> App:
+        """Create a new app."""
+        return self._client._bridge.run(self._async.create(options))
+
+    def update(self, app: str, update: AppUpdate) -> App:
+        """Update an existing app."""
+        return self._client._bridge.run(self._async.update(app, update))
+
+    def delete(self, app: str) -> None:
+        """Delete an app by its ID or slug."""
+        self._client._bridge.run(self._async.delete(app))
