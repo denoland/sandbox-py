@@ -657,7 +657,9 @@ class AsyncVsCode:
 class VsCode:
     """Experimental! A VSCode instance running inside the sandbox."""
 
-    def __init__(self, rpc: AsyncRpcClient, bridge: AsyncBridge, async_vscode: AsyncVsCode):
+    def __init__(
+        self, rpc: AsyncRpcClient, bridge: AsyncBridge, async_vscode: AsyncVsCode
+    ):
         self._rpc = rpc
         self._bridge = bridge
         self._async = async_vscode
