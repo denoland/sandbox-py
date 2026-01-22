@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Generic, Literal, Optional, TypedDict, TypeVar, cast
+from typing_extensions import NotRequired
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    Optional,
+    TypedDict,
+    TypeVar,
+    cast,
+)
 import httpx
 
 from .api_types_generated import (
@@ -12,7 +21,6 @@ from .options import InternalOptions
 from .utils import convert_to_snake_case, parse_link_header
 
 T = TypeVar("T")
-O = TypeVar("O")  # noqa: E741
 
 
 class Revision(RevisionWithoutTimelines):
@@ -26,14 +34,22 @@ class ExposeSSHResult(TypedDict):
     port: int
 
 
-class AsyncPaginatedList(Generic[T, O]):
+class PaginationOptions(TypedDict):
+    cursor: NotRequired[str | None]
+    """The cursor for pagination."""
+
+    limit: NotRequired[int | None]
+    """Limit the number of items to return."""
+
+
+class AsyncPaginatedList(Generic[T]):
     def __init__(
         self,
         client: AsyncConsoleClient,
         items: list[T],
         path: str,
         next_cursor: str | None,
-        options: Optional[O] = None,
+        options: Optional[dict[str, Any]] = None,
     ):
         self._client = client
         self._options = options
@@ -45,7 +61,7 @@ class AsyncPaginatedList(Generic[T, O]):
         self.next_cursor = next_cursor
         """The cursor for pagination."""
 
-    async def get_next_page(self) -> AsyncPaginatedList[T, O] | None:
+    async def get_next_page(self) -> AsyncPaginatedList[T] | None:
         if not self.has_more:
             return None
 
@@ -74,17 +90,17 @@ class AsyncPaginatedList(Generic[T, O]):
         return next_page
 
 
-class PaginatedList(Generic[T, O]):
+class PaginatedList(Generic[T]):
     def __init__(
         self,
         bridge: AsyncBridge,
-        async_paginated: AsyncPaginatedList[T, O],
+        async_paginated: AsyncPaginatedList[T],
     ):
         self._bridge = bridge
         self._async_paginated = async_paginated
 
-    def get_next_page(self) -> PaginatedList[T, O] | None:
-        next_page: AsyncPaginatedList[T, O] | None = self._bridge.run(
+    def get_next_page(self) -> PaginatedList[T] | None:
+        next_page: AsyncPaginatedList[T] | None = self._bridge.run(
             self._async_paginated.get_next_page()
         )
         if next_page is None:
@@ -177,8 +193,8 @@ class AsyncConsoleClient:
         self,
         path: str,
         cursor: Optional[str],
-        params: Optional[O] = None,
-    ) -> AsyncPaginatedList[T, O]:
+        params: Optional[dict[str, Any]] = None,
+    ) -> AsyncPaginatedList[T]:
         req_url = self._options["console_url"].join(path)
 
         if params is not None:

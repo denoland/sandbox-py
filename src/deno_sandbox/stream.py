@@ -98,7 +98,7 @@ async def complete_stream(
             await writer.enqueue(chunk)
     else:
         # Sync iterable
-        for chunk in data:  # type: ignore[union-attr]
+        for chunk in data:
             await writer.enqueue(chunk)
 
     await writer.end()

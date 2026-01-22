@@ -28,7 +28,7 @@ async def test_connect_async():
     sdk = AsyncDenoDeploy()
 
     async with sdk.sandbox.create() as sandbox:
-        async with sdk.sandbox.connect({"id": sandbox.id}) as connected_sandbox:
+        async with sdk.sandbox.connect(sandbox.id) as connected_sandbox:
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
@@ -42,7 +42,7 @@ def test_connect_sync():
     sdk = DenoDeploy()
 
     with sdk.sandbox.create() as sandbox:
-        with sdk.sandbox.connect({"id": sandbox.id}) as connected_sandbox:
+        with sdk.sandbox.connect(sandbox.id) as connected_sandbox:
             assert connected_sandbox is not None
             assert connected_sandbox.id == sandbox.id
 
@@ -75,11 +75,9 @@ async def test_spawn_async(async_shared_sandbox) -> None:
 
     p = await sb.spawn(
         "npx",
-        {
-            "args": ["cowsay", "foo"],
-            "stdout": "piped",
-            "stderr": "piped",
-        },
+        args=["cowsay", "foo"],
+        stdout="piped",
+        stderr="piped",
     )
 
     status = await p.wait()
@@ -96,11 +94,9 @@ async def test_spawn_sync(shared_sandbox) -> None:
 
     p = sb.spawn(
         "npx",
-        {
-            "args": ["cowsay", "foo"],
-            "stdout": "piped",
-            "stderr": "piped",
-        },
+        args=["cowsay", "foo"],
+        stdout="piped",
+        stderr="piped",
     )
 
     status = p.wait()
@@ -155,9 +151,7 @@ async def test_expose_http_async(async_shared_sandbox):
     sb = async_shared_sandbox
 
     async with await sb.deno.run(
-        {
-            "code": "Deno.serve({port: 4000}, req => new Response('ok'))",
-        }
+        code="Deno.serve({port: 4000}, req => new Response('ok'))",
     ) as cp:
         await cp.wait_http_ready()
 
@@ -172,9 +166,7 @@ def test_expose_http_sync(shared_sandbox):
     sb = shared_sandbox
 
     with sb.deno.run(
-        {
-            "code": "Deno.serve({port: 4000}, req => new Response('ok'))",
-        }
+        code="Deno.serve({port: 4000}, req => new Response('ok'))",
     ) as cp:
         cp.wait_http_ready()
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 from typing_extensions import Optional
 
 from .bridge import AsyncBridge
@@ -12,7 +12,6 @@ from .console import (
 
 from .api_types_generated import (
     Snapshot,
-    SnapshotListOptions,
 )
 from .utils import convert_to_snake_case
 
@@ -30,11 +29,28 @@ class AsyncSnapshots:
         return cast(Snapshot, raw_result)
 
     async def list(
-        self, options: Optional[SnapshotListOptions] = None
-    ) -> AsyncPaginatedList[Snapshot, SnapshotListOptions]:
-        """List snapshots."""
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> AsyncPaginatedList[Snapshot]:
+        """List snapshots.
+
+        Args:
+            cursor: The cursor for pagination.
+            limit: Limit the number of snapshots to return.
+            search: The search query to filter snapshots by.
+        """
+        options: dict[str, Any] = {}
+        if cursor is not None:
+            options["cursor"] = cursor
+        if limit is not None:
+            options["limit"] = limit
+        if search is not None:
+            options["search"] = search
         return await self._client.get_paginated(
-            "/api/v2/snapshots", cursor=None, params=options
+            "/api/v2/snapshots", cursor=None, params=options if options else None
         )
 
     async def delete(self, id_or_slug: str) -> None:
@@ -53,11 +69,22 @@ class Snapshots:
         return self._bridge.run(self._async.get(id_or_slug))
 
     def list(
-        self, options: Optional[SnapshotListOptions] = None
-    ) -> PaginatedList[Snapshot, SnapshotListOptions]:
-        """List snapshots."""
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> PaginatedList[Snapshot]:
+        """List snapshots.
 
-        paginated = self._bridge.run(self._async.list(options))
+        Args:
+            cursor: The cursor for pagination.
+            limit: Limit the number of snapshots to return.
+            search: The search query to filter snapshots by.
+        """
+        paginated = self._bridge.run(
+            self._async.list(cursor=cursor, limit=limit, search=search)
+        )
         return PaginatedList(self._bridge, paginated)
 
     def delete(self, id_or_slug: str) -> None:

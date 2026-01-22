@@ -178,8 +178,9 @@ async def test_spawn_stdin_stream_async(async_shared_sandbox):
 
     p = await sb.spawn(
         "cat",
-        {"stdout": "piped", "stderr": "piped"},
-        stdin=stdin_chunks(),
+        stdout="piped",
+        stderr="piped",
+        stdin_data=stdin_chunks(),
     )
 
     status = await p.wait()
@@ -198,8 +199,9 @@ def test_spawn_stdin_stream_sync(shared_sandbox):
 
     p = sb.spawn(
         "cat",
-        {"stdout": "piped", "stderr": "piped"},
-        stdin=stdin_chunks(),
+        stdout="piped",
+        stderr="piped",
+        stdin_data=stdin_chunks(),
     )
 
     status = p.wait()
@@ -218,8 +220,9 @@ async def test_spawn_stdin_file_object_async(async_shared_sandbox):
 
     p = await sb.spawn(
         "cat",
-        {"stdout": "piped", "stderr": "piped"},
-        stdin=file_obj,
+        stdout="piped",
+        stderr="piped",
+        stdin_data=file_obj,
     )
 
     status = await p.wait()
@@ -237,8 +240,9 @@ def test_spawn_stdin_file_object_sync(shared_sandbox):
 
     p = sb.spawn(
         "cat",
-        {"stdout": "piped", "stderr": "piped"},
-        stdin=file_obj,
+        stdout="piped",
+        stderr="piped",
+        stdin_data=file_obj,
     )
 
     status = p.wait()
@@ -260,18 +264,16 @@ async def test_deno_run_stdin_stream_async(async_shared_sandbox):
         yield b"deno stdin test"
 
     p = await sb.deno.run(
-        {
-            "code": """
+        code="""
 const buf = new Uint8Array(1024);
 const n = await Deno.stdin.read(buf);
 if (n) {
     await Deno.stdout.write(buf.subarray(0, n));
 }
 """,
-            "stdout": "piped",
-            "stderr": "piped",
-        },
-        stdin=stdin_chunks(),
+        stdout="piped",
+        stderr="piped",
+        stdin_data=stdin_chunks(),
     )
 
     status = await p.wait()
@@ -289,18 +291,16 @@ def test_deno_run_stdin_stream_sync(shared_sandbox):
         yield b"deno stdin test sync"
 
     p = sb.deno.run(
-        {
-            "code": """
+        code="""
 const buf = new Uint8Array(1024);
 const n = await Deno.stdin.read(buf);
 if (n) {
     await Deno.stdout.write(buf.subarray(0, n));
 }
 """,
-            "stdout": "piped",
-            "stderr": "piped",
-        },
-        stdin=stdin_chunks(),
+        stdout="piped",
+        stderr="piped",
+        stdin_data=stdin_chunks(),
     )
 
     status = p.wait()

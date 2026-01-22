@@ -16,12 +16,7 @@ async def test_volume_create_root_async():
 
     slug = gen_volume_name()
     volume = await sdk.volumes.create(
-        {
-            "capacity": "10GB",
-            "region": "ord",
-            "slug": slug,
-            "from_snapshot": "builtin:debian-13",
-        }
+        slug, "ord", "10GB", from_snapshot="builtin:debian-13"
     )
 
     expected: Volume = {
@@ -36,13 +31,13 @@ async def test_volume_create_root_async():
     }
     assert volume == expected
 
-    async with sdk.sandbox.create({"root": volume["slug"], "region": "ord"}) as sb:
+    async with sdk.sandbox.create(root=volume["slug"], region="ord") as sb:
         await sb.fs.write_text_file("/app/foo.txt", "foo")
         cp = await sb.spawn("sync")
         await cp.wait()
 
     await asyncio.sleep(1)
 
-    async with sdk.sandbox.create({"root": volume["slug"], "region": "ord"}) as sb:
+    async with sdk.sandbox.create(root=volume["slug"], region="ord") as sb:
         content = await sb.fs.read_text_file("/app/foo.txt")
         assert content == "foo"
