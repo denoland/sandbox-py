@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import cast
 from typing_extensions import Optional
 
+from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
-    ConsoleClient,
     PaginatedList,
 )
 
@@ -43,22 +43,23 @@ class AsyncSnapshots:
 
 
 class Snapshots:
-    def __init__(self, client: ConsoleClient):
+    def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
         self._client = client
-        self._async = AsyncSnapshots(client._async)
+        self._bridge = bridge
+        self._async = AsyncSnapshots(client)
 
     def get(self, id_or_slug: str) -> Snapshot | None:
         """Get a snapshot by ID or slug."""
-        return self._client._bridge.run(self._async.get(id_or_slug))
+        return self._bridge.run(self._async.get(id_or_slug))
 
     def list(
         self, options: Optional[SnapshotListOptions] = None
     ) -> PaginatedList[Snapshot, SnapshotListOptions]:
         """List snapshots."""
 
-        paginated = self._client._bridge.run(self._async.list(options))
-        return PaginatedList(self._client._bridge, paginated)
+        paginated = self._bridge.run(self._async.list(options))
+        return PaginatedList(self._bridge, paginated)
 
     def delete(self, id_or_slug: str) -> None:
         """Delete snapshot by ID or slug."""
-        self._client._bridge.run(self._async.delete(id_or_slug))
+        self._bridge.run(self._async.delete(id_or_slug))

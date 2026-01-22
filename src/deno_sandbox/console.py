@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Generic, Literal, Optional, TypedDict, TypeVar, cast
 import httpx
 
 from .api_types_generated import (
     RevisionWithoutTimelines,
-    SandboxListOptions,
-    SandboxMeta,
     Timeline,
 )
 from .bridge import AsyncBridge
@@ -27,10 +24,6 @@ class ExposeSSHResult(TypedDict):
     hostname: str
     username: str
     port: int
-
-
-class ExposeHTTPResult(TypedDict):
-    domain: str
 
 
 class AsyncPaginatedList(Generic[T, O]):
@@ -218,82 +211,5 @@ class AsyncConsoleClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    # Sandbox-related methods (used by sandbox.py)
-    async def _sandboxes_list(
-        self, options: Optional[SandboxListOptions] = None
-    ) -> AsyncPaginatedList[SandboxMeta, SandboxListOptions]:
-        sandboxes: AsyncPaginatedList[
-            SandboxMeta, SandboxListOptions
-        ] = await self.get_paginated(
-            path="/api/v3/sandboxes", cursor=None, params=options
-        )
-        return sandboxes
 
-    async def _kill_sandbox(self, sandbox_id: str) -> None:
-        await self.delete(f"/api/v3/sandboxes/{sandbox_id}")
-
-    async def _extend_timeout(self, sandbox_id: str, stop_at_ms: int) -> datetime:
-        url = self._options["sandbox_url"].join(f"/api/v3/sandbox/{sandbox_id}")
-
-        result = await self._request("PATCH", url, {"stop_at_ms": stop_at_ms})
-
-        data = result.json()
-
-        return datetime.fromtimestamp(data["stop_at_ms"] / 1000, tz=timezone.utc)
-
-    async def _expose_http(self, sandbox_id: str, params: dict[str, int]) -> str:
-        url = self._options["sandbox_url"].join(
-            f"/api/v3/sandbox/{sandbox_id}/expose/http"
-        )
-
-        result = await self._request("POST", url, params)
-
-        data = cast(ExposeHTTPResult, result.json())
-        return data["domain"]
-
-    async def _expose_ssh(self, sandbox_id: str) -> ExposeSSHResult:
-        url = self._options["sandbox_url"].join(
-            f"/api/v3/sandbox/{sandbox_id}/expose/ssh"
-        )
-        response = await self._request("POST", url, {})
-
-        return cast(ExposeSSHResult, response.json())
-
-
-class ConsoleClient:
-    def __init__(self, options: InternalOptions, bridge: AsyncBridge):
-        self._async = AsyncConsoleClient(options)
-        self._bridge = bridge
-
-    def close(self):
-        self._bridge.run(self._async.close())
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
-
-    # Sandbox-related methods (used by sandbox.py)
-    def _sandboxes_list(
-        self, options: Optional[SandboxListOptions] = None
-    ) -> PaginatedList[SandboxMeta, SandboxListOptions]:
-        paginated: AsyncPaginatedList[SandboxMeta, SandboxListOptions] = (
-            self._bridge.run(self._async._sandboxes_list(options))
-        )
-        return PaginatedList(self._bridge, paginated)
-
-    def _kill_sandbox(self, sandbox_id: str) -> None:
-        self._bridge.run(self._async._kill_sandbox(sandbox_id))
-
-    def _extend_timeout(self, sandbox_id: str, stop_at_ms: int) -> None:
-        self._bridge.run(self._async._extend_timeout(sandbox_id, stop_at_ms))
-
-    def _expose_http(self, sandbox_id: str, params: dict[str, int]) -> str:
-        return self._bridge.run(self._async._expose_http(sandbox_id, params))
-
-    def _expose_ssh(self, sandbox_id: str) -> ExposeSSHResult:
-        return self._bridge.run(self._async._expose_ssh(sandbox_id))
-
-
-__all__ = ["AsyncConsoleClient", "ConsoleClient"]
+__all__ = ["AsyncConsoleClient"]

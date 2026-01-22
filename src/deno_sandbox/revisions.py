@@ -7,10 +7,10 @@ from .api_types_generated import (
     RevisionListOptions,
     RevisionWithoutTimelines,
 )
+from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
-    ConsoleClient,
     PaginatedList,
     Revision,
 )
@@ -39,18 +39,19 @@ class AsyncRevisions:
 
 
 class Revisions:
-    def __init__(self, client: ConsoleClient):
+    def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
         self._client = client
-        self._async = AsyncRevisions(client._async)
+        self._bridge = bridge
+        self._async = AsyncRevisions(client)
 
     def get(self, app: str, id: str) -> Revision | None:
         """Get a revision by its ID for a specific app."""
-        return self._client._bridge.run(self._async.get(app, id))
+        return self._bridge.run(self._async.get(app, id))
 
     def list(
         self, app: str, options: Optional[RevisionListOptions] = None
     ) -> PaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
         """List revisions for a specific app."""
 
-        paginated = self._client._bridge.run(self._async.list(app, options))
-        return PaginatedList(self._client._bridge, paginated)
+        paginated = self._bridge.run(self._async.list(app, options))
+        return PaginatedList(self._bridge, paginated)

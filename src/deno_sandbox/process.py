@@ -11,7 +11,6 @@ from .rpc import (
     AsyncFetchResponse,
     AsyncRpcClient,
     FetchResponse,
-    RpcClient,
 )
 
 T = TypeVar("T")
@@ -199,14 +198,16 @@ class SyncStreamReader:
 class ChildProcess:
     def __init__(
         self,
-        rpc: RpcClient,
+        rpc: AsyncRpcClient,
+        bridge: AsyncBridge,
         async_proc: AsyncChildProcess,
     ):
         self._rpc = rpc
+        self._bridge = bridge
 
         self._async_proc = async_proc
-        self.stdout = SyncStreamReader(rpc._bridge, self._async_proc.stdout)
-        self.stderr = SyncStreamReader(rpc._bridge, self._async_proc.stderr)
+        self.stdout = SyncStreamReader(bridge, self._async_proc.stdout)
+        self.stderr = SyncStreamReader(bridge, self._async_proc.stderr)
         self.returncode: int | None = None
 
     @property
@@ -214,13 +215,13 @@ class ChildProcess:
         return self._async_proc.pid
 
     def wait(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async_proc.wait())
+        return self._bridge.run(self._async_proc.wait())
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._rpc._bridge.run(self._async_proc.__aexit__(exc_type, exc_val, exc_tb))
+        self._bridge.run(self._async_proc.__aexit__(exc_type, exc_val, exc_tb))
 
 
 class AsyncDenoProcess(AsyncChildProcess):
@@ -288,16 +289,16 @@ class AsyncDenoProcess(AsyncChildProcess):
 class DenoProcess(ChildProcess):
     def __init__(
         self,
-        rpc: RpcClient,
+        rpc: AsyncRpcClient,
+        bridge: AsyncBridge,
         async_proc: AsyncDenoProcess,
     ):
-        super().__init__(rpc, async_proc)
+        super().__init__(rpc, bridge, async_proc)
         self._async = async_proc
 
     def wait_http_ready(self) -> bool:
         """Whether the Deno process is ready to accept HTTP requests."""
-
-        return self._rpc._bridge.run(self._async.wait_http_ready())
+        return self._bridge.run(self._async.wait_http_ready())
 
     def fetch(
         self,
@@ -307,8 +308,10 @@ class DenoProcess(ChildProcess):
         redirect: Optional[Literal["follow", "manual"]] = None,
     ) -> FetchResponse:
         """Fetch a URL from the Deno process."""
-
-        return self._rpc.fetch(url, method, headers, redirect, self.pid)
+        async_response = self._bridge.run(
+            self._rpc.fetch(url, method, headers, redirect, self.pid)
+        )
+        return FetchResponse(async_response)
 
 
 class AsyncDenoRepl(AsyncChildProcess):
@@ -356,29 +359,28 @@ class AsyncDenoRepl(AsyncChildProcess):
 class DenoRepl:
     def __init__(
         self,
-        rpc: RpcClient,
+        rpc: AsyncRpcClient,
+        bridge: AsyncBridge,
         async_proc: AsyncDenoRepl,
     ):
         self._rpc = rpc
+        self._bridge = bridge
 
         self._async = async_proc
-        self.stdout = SyncStreamReader(rpc._bridge, self._async.stdout)
-        self.stderr = SyncStreamReader(rpc._bridge, self._async.stderr)
+        self.stdout = SyncStreamReader(bridge, self._async.stdout)
+        self.stderr = SyncStreamReader(bridge, self._async.stderr)
 
     def eval(self, code: str) -> str:
         """Evaluate code in the REPL and return the output."""
-
-        return self._rpc._bridge.run(self._async.eval(code))
+        return self._bridge.run(self._async.eval(code))
 
     def call(self, fn: str, args: list[Any]) -> Any:
         """Call a function in the REPL process."""
-
-        return self._rpc._bridge.run(self._async.call(fn, args))
+        return self._bridge.run(self._async.call(fn, args))
 
     def close(self) -> None:
         """Close the REPL process."""
-
-        self._rpc._bridge.run(self._async.close())
+        self._bridge.run(self._async.close())
 
     @property
     def returncode(self) -> int | None:
@@ -389,10 +391,10 @@ class DenoRepl:
         return self._async.pid
 
     def wait(self) -> ChildProcessStatus:
-        return self._rpc._bridge.run(self._async.wait())
+        return self._bridge.run(self._async.wait())
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._rpc._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
+        self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))

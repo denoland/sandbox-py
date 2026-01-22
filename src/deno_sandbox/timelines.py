@@ -7,10 +7,10 @@ from .api_types_generated import (
     TimelineListOptions,
 )
 
+from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
-    ConsoleClient,
     PaginatedList,
 )
 
@@ -29,14 +29,15 @@ class AsyncTimelines:
 
 
 class Timelines:
-    def __init__(self, client: ConsoleClient):
+    def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
         self._client = client
-        self._async = AsyncTimelines(client._async)
+        self._bridge = bridge
+        self._async = AsyncTimelines(client)
 
     def list(
         self, app: str, options: Optional[TimelineListOptions] = None
     ) -> PaginatedList[Timeline, TimelineListOptions]:
         """List timelines for a specific app."""
 
-        paginated = self._client._bridge.run(self._async.list(app, options))
-        return PaginatedList(self._client._bridge, paginated)
+        paginated = self._bridge.run(self._async.list(app, options))
+        return PaginatedList(self._bridge, paginated)
