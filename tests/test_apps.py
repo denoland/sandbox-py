@@ -32,11 +32,7 @@ async def test_apps_create_options_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_app_name()
-    app = await sdk.apps.create(
-        {
-            "slug": slug,
-        }
-    )
+    app = await sdk.apps.create(slug=slug)
 
     assert app["slug"] == slug
     await sdk.apps.delete(app["id"])
@@ -46,11 +42,7 @@ def test_apps_create_options_sync():
     sdk = DenoDeploy()
 
     slug = gen_app_name()
-    app = sdk.apps.create(
-        {
-            "slug": slug,
-        }
-    )
+    app = sdk.apps.create(slug=slug)
 
     assert app["slug"] == slug
     sdk.apps.delete(app["id"])
@@ -63,7 +55,7 @@ async def test_apps_update_async():
     app = await sdk.apps.create()
 
     slug = gen_app_name()
-    updated = await sdk.apps.update(app["id"], {"slug": slug})
+    updated = await sdk.apps.update(app["id"], slug=slug)
 
     assert updated["slug"] == slug
     assert updated["id"] == app["id"]
@@ -80,7 +72,7 @@ async def test_apps_update_sync():
     app = sdk.apps.create()
 
     slug = gen_app_name()
-    updated = sdk.apps.update(app["id"], {"slug": slug})
+    updated = sdk.apps.update(app["id"], slug=slug)
 
     assert updated["slug"] == slug
     assert updated["id"] == app["id"]

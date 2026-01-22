@@ -11,6 +11,8 @@ This Python SDK let's you create and manage sandboxes programmatically.
 
 ```sh
 uv add deno-sandbox
+# or
+pip install deno-sandbox
 ```
 
 ## Quick Start
@@ -24,14 +26,8 @@ def main()
   sdk = DenoDeploy()
 
   with sdk.sandbox.create() as sb
-    child_process = sb.spawn("npx", {
-      "args": [
-        "cowsay",
-        "hello"
-      ]
-    })
-
-    await p.wait()
+    child_process = sb.spawn("npx", args=["cowsay", "hello"])
+    p.wait()
 
 if __name__ == "__main__"
   main()
@@ -46,13 +42,7 @@ async def main()
   sdk = AsyncDenoDeploy()
 
   async with sdk.sandbox.create() as sb
-    child_process = await sb.spawn("npx", {
-      "args": [
-        "cowsay",
-        "hello"
-      ]
-    })
-
+    child_process = await sb.spawn("npx", args=["cowsay", "hello"])
     await p.wait()
 
 if __name__ == "__main__"

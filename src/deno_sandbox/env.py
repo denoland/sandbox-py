@@ -25,7 +25,7 @@ class AsyncSandboxEnv:
         params = {"key": key, "value": value}
         await self._rpc.call("envSet", params)
 
-    async def to_object(self) -> dict[str, str]:
+    async def as_dict(self) -> dict[str, str]:
         """Get all environment variables."""
 
         params = {}
@@ -54,9 +54,9 @@ class SandboxEnv:
         """Set the value of an environment variable."""
         self._bridge.run(self._async.set(key, value))
 
-    def to_object(self) -> dict[str, str]:
+    def as_dict(self) -> dict[str, str]:
         """Get all environment variables."""
-        return self._bridge.run(self._async.to_object())
+        return self._bridge.run(self._async.as_dict())
 
     def delete(self, key: str) -> None:
         """Delete an environment variable."""

@@ -14,9 +14,7 @@ async def test_volume_create_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_volume_name()
-    volume = await sdk.volumes.create(
-        {"capacity": "1GB", "region": "ord", "slug": slug}
-    )
+    volume = await sdk.volumes.create(slug, "ord", "1GB")
 
     assert volume is not None
     assert volume["id"] is not None
@@ -38,7 +36,7 @@ async def test_volume_create_sync():
     sdk = DenoDeploy()
 
     slug = gen_volume_name()
-    volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
+    volume = sdk.volumes.create(slug, "ord", "1GB")
 
     assert volume is not None
     assert volume["id"] is not None
@@ -61,9 +59,7 @@ async def test_volume_delete_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_volume_name()
-    volume = await sdk.volumes.create(
-        {"capacity": "1GB", "region": "ord", "slug": slug}
-    )
+    volume = await sdk.volumes.create(slug, "ord", "1GB")
 
     await sdk.volumes.delete(volume["id"])
     result = await sdk.volumes.get(volume["id"])
@@ -74,7 +70,7 @@ async def test_volume_delete_sync():
     sdk = DenoDeploy()
 
     slug = gen_volume_name()
-    volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
+    volume = sdk.volumes.create(slug, "ord", "1GB")
 
     sdk.volumes.delete(volume["id"])
 
@@ -87,9 +83,7 @@ async def test_volume_get_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_volume_name()
-    volume = await sdk.volumes.create(
-        {"capacity": "1GB", "region": "ord", "slug": slug}
-    )
+    volume = await sdk.volumes.create(slug, "ord", "1GB")
 
     volume2 = await sdk.volumes.get(volume["id"])
 
@@ -100,7 +94,7 @@ async def test_volume_get_sync():
     sdk = DenoDeploy()
 
     slug = gen_volume_name()
-    volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
+    volume = sdk.volumes.create(slug, "ord", "1GB")
 
     volume2 = sdk.volumes.get(volume["id"])
     assert volume == volume2
@@ -111,9 +105,7 @@ async def test_volume_list_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_volume_name()
-    volume = await sdk.volumes.create(
-        {"capacity": "1GB", "region": "ord", "slug": slug}
-    )
+    volume = await sdk.volumes.create(slug, "ord", "1GB")
 
     volumes = await sdk.volumes.list()
 
@@ -126,7 +118,7 @@ async def test_volume_list_sync():
     sdk = DenoDeploy()
 
     slug = gen_volume_name()
-    volume = sdk.volumes.create({"capacity": "1GB", "region": "ord", "slug": slug})
+    volume = sdk.volumes.create(slug, "ord", "1GB")
 
     volumes = sdk.volumes.list()
 

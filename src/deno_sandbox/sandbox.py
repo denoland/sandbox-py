@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import builtins
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 import json
@@ -21,6 +22,7 @@ from .stream import Streamable, complete_stream, start_stream
 from .env import AsyncSandboxEnv, SandboxEnv
 from .fs import AsyncSandboxFs, SandboxFs
 from .process import (
+    AbortSignal,
     AsyncChildProcess,
     AsyncDenoProcess,
     AsyncDenoRepl,
@@ -31,13 +33,7 @@ from .process import (
     RemoteProcessOptions,
 )
 from .api_types_generated import (
-    DenoReplOptions,
-    DenoRunOptions,
-    SandboxListOptions,
-    SandboxCreateOptions,
-    SandboxConnectOptions,
     SandboxMeta,
-    SpawnOptions,
 )
 from .bridge import AsyncBridge
 from .console import (
@@ -50,10 +46,6 @@ from .rpc import AsyncFetchResponse, AsyncRpcClient, FetchResponse
 from .transport import (
     WebSocketTransport,
 )
-from .utils import (
-    to_camel_case,
-    to_snake_case,
-)
 
 
 Mode: TypeAlias = Literal["connect", "create"]
@@ -63,7 +55,7 @@ StdIo: TypeAlias = Literal["piped", "null"]
 class SecretConfig(TypedDict):
     """List of hostnames where this secret can be used. Must have at least one host."""
 
-    hosts: list[str]
+    hosts: builtins.list[str]
     value: str
 
 
@@ -80,8 +72,8 @@ class AppConfig(TypedDict):
     stop_at_ms: NotRequired[int | None]
     labels: NotRequired[dict[str, str] | None]
     memory_mb: NotRequired[int | None]
-    volumes: NotRequired[list[VolumeInfo] | None]
-    allow_net: NotRequired[list[str] | None]
+    volumes: NotRequired[builtins.list[VolumeInfo] | None]
+    allow_net: NotRequired[builtins.list[str] | None]
     root: NotRequired[AppConfigVolume | None]
     secrets: NotRequired[dict[str, SecretConfig] | None]
 
@@ -99,23 +91,62 @@ class AsyncSandboxApi:
 
     @asynccontextmanager
     async def create(
-        self, options: Optional[SandboxCreateOptions] = None
+        self,
+        *,
+        region: Optional[str] = None,
+        env: Optional[dict[str, str]] = None,
+        timeout: Optional[str] = None,
+        memory_mb: Optional[int] = None,
+        debug: Optional[bool] = None,
+        labels: Optional[dict[str, str]] = None,
+        root: Optional[str] = None,
+        volumes: Optional[dict[str, str]] = None,
+        allow_net: Optional[builtins.list[str]] = None,
+        secrets: Optional[dict[str, SecretConfig]] = None,
+        ssh: Optional[bool] = None,
+        port: Optional[int] = None,
     ) -> AsyncIterator[AsyncSandbox]:
-        """Creates a new sandbox instance."""
+        """Creates a new sandbox instance.
 
+        Args:
+            region: The region where the sandbox should be created.
+            env: Environment variables to start the sandbox with.
+            timeout: The timeout of the sandbox. Defaults to "session". Other values like "30s" or "2m" are supported.
+            memory_mb: The memory size in MiB of the sandbox. Defaults to 1280.
+            debug: Enable debug logging for the sandbox connection.
+            labels: Labels to set on the sandbox. Up to 5 labels can be specified.
+            root: A volume or snapshot to use as the root filesystem of the sandbox.
+            volumes: Volumes to mount on the sandbox. The key is the mount path, the value is the volume ID or slug.
+            allow_net: List of hostnames/IP addresses the sandbox can make outbound requests to.
+            secrets: Secret environment variables injected on the wire for HTTPS requests.
+            ssh: Whether to expose SSH access to the sandbox.
+            port: The port number to expose for HTTP access.
+        """
         config_dict: dict[str, Any] = {
-            "memory_mb": 1280,
-            "debug": options.get("debug", False) if options else False,
+            "memory_mb": memory_mb if memory_mb is not None else 1280,
+            "debug": debug if debug is not None else False,
         }
 
-        # Ensure null values are not included
-        if options is not None:
-            for k, v in options.items():
-                if v is not None:
-                    if k == "root":
-                        config_dict["root"] = {"volume": v}
-                    else:
-                        config_dict[k] = v
+        if region is not None:
+            config_dict["region"] = region
+        if env is not None:
+            config_dict["env"] = env
+        if timeout is not None:
+            config_dict["timeout"] = timeout
+        if labels is not None:
+            config_dict["labels"] = labels
+        if root is not None:
+            config_dict["root"] = {"volume": root}
+        if volumes is not None:
+            config_dict["volumes"] = volumes
+        if allow_net is not None:
+            config_dict["allow_net"] = allow_net
+        if secrets is not None:
+            config_dict["secrets"] = secrets
+        if ssh is not None:
+            config_dict["ssh"] = ssh
+        if port is not None:
+            config_dict["port"] = port
 
         app_config = cast(AppConfig, config_dict)
 
@@ -155,12 +186,14 @@ class AsyncSandboxApi:
 
     @asynccontextmanager
     async def connect(
-        self, options: SandboxConnectOptions
+        self,
+        sandbox_id: str,
     ) -> AsyncIterator[AsyncSandbox]:
-        """Connects to an existing sandbox instance."""
+        """Connects to an existing sandbox instance.
 
-        sandbox_id = options["id"]
-
+        Args:
+            sandbox_id: The unique id of the sandbox to connect to.
+        """
         url = self._client._options["sandbox_ws_url"].join(
             f"/api/v3/sandbox/{sandbox_id}/connect"
         )
@@ -183,10 +216,20 @@ class AsyncSandboxApi:
                 await sandbox.close()
 
     async def list(
-        self, options: Optional[SandboxListOptions] = None
-    ) -> AsyncPaginatedList[SandboxMeta, SandboxListOptions]:
+        self,
+        *,
+        labels: Optional[dict[str, str]] = None,
+    ) -> AsyncPaginatedList[SandboxMeta]:
+        """List sandboxes.
+
+        Args:
+            labels: Filter sandboxes by labels.
+        """
+        options: dict[str, Any] = {}
+        if labels is not None:
+            options["labels"] = labels
         return await self._client.get_paginated(
-            path="/api/v3/sandboxes", cursor=None, params=options
+            path="/api/v3/sandboxes", cursor=None, params=options if options else None
         )
 
 
@@ -197,8 +240,52 @@ class SandboxApi:
         self._async = AsyncSandboxApi(client)
 
     @contextmanager
-    def create(self, options: Optional[SandboxCreateOptions] = None):
-        async_cm = self._async.create(options)
+    def create(
+        self,
+        *,
+        region: Optional[str] = None,
+        env: Optional[dict[str, str]] = None,
+        timeout: Optional[str] = None,
+        memory_mb: Optional[int] = None,
+        debug: Optional[bool] = None,
+        labels: Optional[dict[str, str]] = None,
+        root: Optional[str] = None,
+        volumes: Optional[dict[str, str]] = None,
+        allow_net: Optional[builtins.list[str]] = None,
+        secrets: Optional[dict[str, SecretConfig]] = None,
+        ssh: Optional[bool] = None,
+        port: Optional[int] = None,
+    ):
+        """Creates a new sandbox instance.
+
+        Args:
+            region: The region where the sandbox should be created.
+            env: Environment variables to start the sandbox with.
+            timeout: The timeout of the sandbox. Defaults to "session". Other values like "30s" or "2m" are supported.
+            memory_mb: The memory size in MiB of the sandbox. Defaults to 1280.
+            debug: Enable debug logging for the sandbox connection.
+            labels: Labels to set on the sandbox. Up to 5 labels can be specified.
+            root: A volume or snapshot to use as the root filesystem of the sandbox.
+            volumes: Volumes to mount on the sandbox. The key is the mount path, the value is the volume ID or slug.
+            allow_net: List of hostnames/IP addresses the sandbox can make outbound requests to.
+            secrets: Secret environment variables injected on the wire for HTTPS requests.
+            ssh: Whether to expose SSH access to the sandbox.
+            port: The port number to expose for HTTP access.
+        """
+        async_cm = self._async.create(
+            region=region,
+            env=env,
+            timeout=timeout,
+            memory_mb=memory_mb,
+            debug=debug,
+            labels=labels,
+            root=root,
+            volumes=volumes,
+            allow_net=allow_net,
+            secrets=secrets,
+            ssh=ssh,
+            port=port,
+        )
         async_handle = self._bridge.run(async_cm.__aenter__())
 
         try:
@@ -212,8 +299,19 @@ class SandboxApi:
             self._bridge.run(async_cm.__aexit__(None, None, None))
 
     @contextmanager
-    def connect(self, options: SandboxConnectOptions):
-        async_cm = self._async.connect(options)
+    def connect(
+        self,
+        sandbox_id: str,
+    ):
+        """Connects to an existing sandbox instance.
+
+        Args:
+            sandbox_id: The unique id of the sandbox to connect to.
+            region: If the sandbox was created in a non-default region, the region where the sandbox is running.
+            debug: Enable debug logging for the sandbox connection.
+            ssh: Whether to expose SSH access to the sandbox.
+        """
+        async_cm = self._async.connect(sandbox_id)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
         try:
@@ -227,68 +325,96 @@ class SandboxApi:
             self._bridge.run(async_cm.__aexit__(None, None, None))
 
     def list(
-        self, options: Optional[SandboxListOptions] = None
-    ) -> PaginatedList[SandboxMeta, SandboxListOptions]:
-        paginated = self._bridge.run(self._async.list(options))
+        self,
+        *,
+        labels: Optional[dict[str, str]] = None,
+    ) -> PaginatedList[SandboxMeta]:
+        """List sandboxes.
+
+        Args:
+            labels: Filter sandboxes by labels.
+        """
+        paginated = self._bridge.run(self._async.list(labels=labels))
         return PaginatedList(self._bridge, paginated)
-
-
-class VsCodeOptions(TypedDict):
-    env: NotRequired[dict[str, str] | None]
-    """Environment variables to pass to the VS Code instance."""
-
-    extensions: NotRequired[list[str] | None]
-    """
-    The extensions to be loaded in the VSCode instance.
-
-    The accepted values are:
-    - an extension id
-    - Coder extension marketplace
-    - path to a .vsix file
-    """
-
-    preview: NotRequired[bool | None]
-    """A URL of a page to load a preview window of inside the VSCode instance."""
-
-    disable_stop_button: NotRequired[bool | None]
-    """If true, the stop button in the VSCode instance will be disabled. Default: false"""
-
-    editor_settings: NotRequired[dict[str, Any] | None]
-    """The value for the default settings.json that VSCode will use."""
 
 
 class AsyncSandboxDeno:
     def __init__(
         self,
         rpc: AsyncRpcClient,
-        processes: list[AsyncChildProcess],
+        processes: builtins.list[AsyncChildProcess],
     ):
         self._rpc = rpc
         self._processes = processes
 
     async def run(
         self,
-        options: DenoRunOptions,
-        stdin: Optional[Streamable] = None,
+        *,
+        args: Optional[builtins.list[str]] = None,
+        cwd: Optional[str] = None,
+        clear_env: Optional[bool] = None,
+        env: Optional[dict[str, str]] = None,
+        signal: Optional[AbortSignal] = None,
+        stdin: Optional[Literal["piped", "null"]] = None,
+        stdout: Optional[Literal["piped", "null", "inherit"]] = None,
+        stderr: Optional[Literal["piped", "null", "inherit"]] = None,
+        script_args: Optional[list[str]] = None,
+        entrypoint: Optional[str] = None,
+        code: Optional[str] = None,
+        extension: Optional[
+            Literal["js", "cjs", "mjs", "ts", "cts", "mts", "jsx", "tsx"]
+        ] = None,
+        stdin_data: Optional[Streamable] = None,
     ) -> AsyncDenoProcess:
-        """Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit."""
+        """Create a new Deno process from the specified entrypoint file or code.
 
-        params = {
-            "stdout": "inherit",
-            "stderr": "inherit",
+        Args:
+            args: Arguments to pass to the process.
+            cwd: The working directory of the process.
+            clear_env: Clear environment variables from parent process.
+            env: Environment variables to pass to the subprocess.
+            signal: An abort signal to cancel the process.
+            stdin: How stdin of the spawned process should be handled.
+            stdout: How stdout of the spawned process should be handled.
+            stderr: How stderr of the spawned process should be handled.
+            script_args: Arguments to pass to the Deno runtime, available as Deno.args.
+            entrypoint: A module to read from disk and execute as the entrypoint.
+            code: Deno code to execute as the entrypoint.
+            extension: File extension to use when executing code. Default is 'ts'.
+            stdin_data: Data to write to stdin of the process.
+        """
+        params: dict[str, Any] = {
+            "stdout": stdout if stdout is not None else "inherit",
+            "stderr": stderr if stderr is not None else "inherit",
         }
 
-        if options is not None:
-            for key, value in options.items():
-                if value is not None:
-                    params[to_snake_case(key)] = value
+        if args is not None:
+            params["args"] = args
+        if cwd is not None:
+            params["cwd"] = cwd
+        if clear_env is not None:
+            params["clear_env"] = clear_env
+        if env is not None:
+            params["env"] = env
+        if signal is not None:
+            params["signal"] = signal
+        if stdin is not None:
+            params["stdin"] = stdin
+        if script_args is not None:
+            params["script_args"] = script_args
+        if entrypoint is not None:
+            params["entrypoint"] = entrypoint
+        if code is not None:
+            params["code"] = code
+        if extension is not None:
+            params["extension"] = extension
 
         if "code" in params and "extension" not in params:
             params["extension"] = "ts"
 
         # If stdin data is provided, start stream first (but don't send data yet)
         stdin_writer = None
-        if stdin is not None:
+        if stdin_data is not None:
             params["stdin"] = "piped"
             stdin_stream_id, stdin_writer = await start_stream(self._rpc)
             params["stdinStreamId"] = stdin_stream_id
@@ -306,8 +432,8 @@ class AsyncSandboxDeno:
         result = await self._rpc.call("spawnDeno", params)
 
         # Now that process is spawned, complete the stdin stream
-        if stdin_writer is not None and stdin is not None:
-            await complete_stream(stdin_writer, stdin)
+        if stdin_writer is not None and stdin_data is not None:
+            await complete_stream(stdin_writer, stdin_data)
 
         process = await AsyncDenoProcess.create(
             result, self._rpc, opts, self._processes
@@ -321,22 +447,58 @@ class AsyncSandboxDeno:
         await repl.close()
         return result
 
-    # TODO: Support deploy method
+    async def repl(
+        self,
+        *,
+        args: Optional[builtins.list[str]] = None,
+        cwd: Optional[str] = None,
+        clear_env: Optional[bool] = None,
+        env: Optional[dict[str, str]] = None,
+        signal: Optional[AbortSignal] = None,
+        stdin: Optional[Literal["piped", "null"]] = None,
+        stdout: Optional[Literal["piped", "null", "inherit"]] = None,
+        stderr: Optional[Literal["piped", "null", "inherit"]] = None,
+        script_args: Optional[builtins.list[str]] = None,
+    ) -> AsyncDenoRepl:
+        """Create a new Deno REPL process.
 
-    async def repl(self, options: Optional[DenoReplOptions] = None) -> AsyncDenoRepl:
-        params = {"stdout": "piped", "stderr": "piped"}
+        Args:
+            args: Arguments to pass to the process.
+            cwd: The working directory of the process.
+            clear_env: Clear environment variables from parent process.
+            env: Environment variables to pass to the subprocess.
+            signal: An abort signal to cancel the process.
+            stdin: How stdin of the spawned process should be handled.
+            stdout: How stdout of the spawned process should be handled.
+            stderr: How stderr of the spawned process should be handled.
+            script_args: Arguments to pass to the Deno runtime, available as Deno.args.
+        """
+        params: dict[str, Any] = {"stdout": "piped", "stderr": "piped"}
 
         opts = RemoteProcessOptions(stdout_inherit=True, stderr_inherit=True)
 
-        if options is not None:
-            for key, value in options.items():
-                if value is not None:
-                    if key == "stdout" and value != "inherit":
-                        opts["stdout_inherit"] = False
-                    if key == "stderr" and value != "inherit":
-                        opts["stderr_inherit"] = False
-
-                    params[to_camel_case(key)] = value
+        if args is not None:
+            params["args"] = args
+        if cwd is not None:
+            params["cwd"] = cwd
+        if clear_env is not None:
+            params["clearEnv"] = clear_env
+        if env is not None:
+            params["env"] = env
+        if signal is not None:
+            params["signal"] = signal
+        if stdin is not None:
+            params["stdin"] = stdin
+        if stdout is not None:
+            params["stdout"] = stdout
+            if stdout != "inherit":
+                opts["stdout_inherit"] = False
+        if stderr is not None:
+            params["stderr"] = stderr
+            if stderr != "inherit":
+                opts["stderr_inherit"] = False
+        if script_args is not None:
+            params["scriptArgs"] = script_args
 
         result: ProcessSpawnResult = await self._rpc.call("spawnDenoRepl", params)
 
@@ -350,7 +512,7 @@ class SandboxDeno:
         self,
         rpc: AsyncRpcClient,
         bridge: AsyncBridge,
-        processes: list[AsyncChildProcess],
+        processes: builtins.list[AsyncChildProcess],
     ):
         self._rpc = rpc
         self._bridge = bridge
@@ -359,20 +521,101 @@ class SandboxDeno:
 
     def run(
         self,
-        options: DenoRunOptions,
-        stdin: Optional[Union[Iterable[bytes], BinaryIO]] = None,
+        *,
+        args: Optional[builtins.list[str]] = None,
+        cwd: Optional[str] = None,
+        clear_env: Optional[bool] = None,
+        env: Optional[dict[str, str]] = None,
+        signal: Optional[AbortSignal] = None,
+        stdin: Optional[Literal["piped", "null"]] = None,
+        stdout: Optional[Literal["piped", "null", "inherit"]] = None,
+        stderr: Optional[Literal["piped", "null", "inherit"]] = None,
+        script_args: Optional[builtins.list[str]] = None,
+        entrypoint: Optional[str] = None,
+        code: Optional[str] = None,
+        extension: Optional[
+            Literal["js", "cjs", "mjs", "ts", "cts", "mts", "jsx", "tsx"]
+        ] = None,
+        stdin_data: Optional[Union[Iterable[bytes], BinaryIO]] = None,
     ) -> DenoProcess:
+        """Create a new Deno process from the specified entrypoint file or code.
+
+        Args:
+            args: Arguments to pass to the process.
+            cwd: The working directory of the process.
+            clear_env: Clear environment variables from parent process.
+            env: Environment variables to pass to the subprocess.
+            signal: An abort signal to cancel the process.
+            stdin: How stdin of the spawned process should be handled.
+            stdout: How stdout of the spawned process should be handled.
+            stderr: How stderr of the spawned process should be handled.
+            script_args: Arguments to pass to the Deno runtime, available as Deno.args.
+            entrypoint: A module to read from disk and execute as the entrypoint.
+            code: Deno code to execute as the entrypoint.
+            extension: File extension to use when executing code. Default is 'ts'.
+            stdin_data: Data to write to stdin of the process.
         """
-        Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit.
-        """
-        async_deno = self._bridge.run(self._async.run(options, stdin))
+        async_deno = self._bridge.run(
+            self._async.run(
+                args=args,
+                cwd=cwd,
+                clear_env=clear_env,
+                env=env,
+                signal=signal,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                script_args=script_args,
+                entrypoint=entrypoint,
+                code=code,
+                extension=extension,
+                stdin_data=stdin_data,
+            )
+        )
         return DenoProcess(self._rpc, self._bridge, async_deno)
 
     def eval(self, code: str) -> Any:
         return self._bridge.run(self._async.eval(code))
 
-    def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
-        async_repl = self._bridge.run(self._async.repl(options))
+    def repl(
+        self,
+        *,
+        args: Optional[builtins.list[str]] = None,
+        cwd: Optional[str] = None,
+        clear_env: Optional[bool] = None,
+        env: Optional[dict[str, str]] = None,
+        signal: Optional[AbortSignal] = None,
+        stdin: Optional[Literal["piped", "null"]] = None,
+        stdout: Optional[Literal["piped", "null", "inherit"]] = None,
+        stderr: Optional[Literal["piped", "null", "inherit"]] = None,
+        script_args: Optional[builtins.list[str]] = None,
+    ) -> DenoRepl:
+        """Create a new Deno REPL process.
+
+        Args:
+            args: Arguments to pass to the process.
+            cwd: The working directory of the process.
+            clear_env: Clear environment variables from parent process.
+            env: Environment variables to pass to the subprocess.
+            signal: An abort signal to cancel the process.
+            stdin: How stdin of the spawned process should be handled.
+            stdout: How stdout of the spawned process should be handled.
+            stderr: How stderr of the spawned process should be handled.
+            script_args: Arguments to pass to the Deno runtime, available as Deno.args.
+        """
+        async_repl = self._bridge.run(
+            self._async.repl(
+                args=args,
+                cwd=cwd,
+                clear_env=clear_env,
+                env=env,
+                signal=signal,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                script_args=script_args,
+            )
+        )
         return DenoRepl(self._rpc, self._bridge, async_repl)
 
 
@@ -382,7 +625,7 @@ class AsyncSandbox:
     ):
         self._client = client
         self._rpc = rpc
-        self._processes: list[AsyncChildProcess] = []
+        self._processes: builtins.list[AsyncChildProcess] = []
 
         self.url: str | None = None
         self.ssh: None = None
@@ -398,23 +641,53 @@ class AsyncSandbox:
     async def spawn(
         self,
         command: str,
-        options: Optional[SpawnOptions] = None,
-        stdin: Optional[Streamable] = None,
+        *,
+        args: Optional[list[str]] = None,
+        cwd: Optional[str] = None,
+        clear_env: Optional[bool] = None,
+        env: Optional[dict[str, str]] = None,
+        signal: Optional[AbortSignal] = None,
+        stdin: Optional[Literal["piped", "null"]] = None,
+        stdout: Optional[Literal["piped", "null", "inherit"]] = None,
+        stderr: Optional[Literal["piped", "null", "inherit"]] = None,
+        stdin_data: Optional[Streamable] = None,
     ) -> AsyncChildProcess:
-        params = {
+        """Spawn a new child process.
+
+        Args:
+            command: The command to execute.
+            args: Arguments to pass to the process.
+            cwd: The working directory of the process.
+            clear_env: Clear environment variables from parent process.
+            env: Environment variables to pass to the subprocess.
+            signal: An abort signal to cancel the process.
+            stdin: How stdin of the spawned process should be handled.
+            stdout: How stdout of the spawned process should be handled.
+            stderr: How stderr of the spawned process should be handled.
+            stdin_data: Data to write to stdin of the process.
+        """
+        params: dict[str, Any] = {
             "command": command,
-            "stdout": "inherit",
-            "stderr": "inherit",
+            "stdout": stdout if stdout is not None else "inherit",
+            "stderr": stderr if stderr is not None else "inherit",
         }
 
-        if options is not None:
-            for key, value in options.items():
-                if value is not None:
-                    params[to_snake_case(key)] = value
+        if args is not None:
+            params["args"] = args
+        if cwd is not None:
+            params["cwd"] = cwd
+        if clear_env is not None:
+            params["clear_env"] = clear_env
+        if env is not None:
+            params["env"] = env
+        if signal is not None:
+            params["signal"] = signal
+        if stdin is not None:
+            params["stdin"] = stdin
 
         # If stdin data is provided, start stream first (but don't send data yet)
         stdin_writer = None
-        if stdin is not None:
+        if stdin_data is not None:
             params["stdin"] = "piped"
             stdin_stream_id, stdin_writer = await start_stream(self._rpc)
             params["stdinStreamId"] = stdin_stream_id
@@ -432,8 +705,8 @@ class AsyncSandbox:
         result: ProcessSpawnResult = await self._rpc.call("spawn", params)
 
         # Now that process is spawned, complete the stdin stream
-        if stdin_writer is not None and stdin is not None:
-            await complete_stream(stdin_writer, stdin)
+        if stdin_writer is not None and stdin_data is not None:
+            await complete_stream(stdin_writer, stdin_data)
 
         process = await AsyncChildProcess.create(
             result, self._rpc, opts, self._processes
@@ -444,6 +717,7 @@ class AsyncSandbox:
     async def fetch(
         self,
         url: str,
+        *,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
         redirect: Optional[Literal["follow", "manual"]] = None,
@@ -479,7 +753,7 @@ class AsyncSandbox:
         return datetime.fromtimestamp(data["stop_at_ms"] / 1000, tz=timezone.utc)
 
     async def expose_http(
-        self, port: Optional[int] = None, pid: Optional[int] = None
+        self, *, port: Optional[int] = None, pid: Optional[int] = None
     ) -> str:
         """Publicly expose a HTTP service via a publicly routeable URL.
 
@@ -561,15 +835,51 @@ class Sandbox:
     def spawn(
         self,
         command: str,
-        options: Optional[SpawnOptions] = None,
-        stdin: Optional[Union[Iterable[bytes], BinaryIO]] = None,
+        *,
+        args: Optional[builtins.list[str]] = None,
+        cwd: Optional[str] = None,
+        clear_env: Optional[bool] = None,
+        env: Optional[dict[str, str]] = None,
+        signal: Optional[AbortSignal] = None,
+        stdin: Optional[Literal["piped", "null"]] = None,
+        stdout: Optional[Literal["piped", "null", "inherit"]] = None,
+        stderr: Optional[Literal["piped", "null", "inherit"]] = None,
+        stdin_data: Optional[Union[Iterable[bytes], BinaryIO]] = None,
     ) -> ChildProcess:
-        async_child = self._bridge.run(self._async.spawn(command, options, stdin))
+        """Spawn a new child process.
+
+        Args:
+            command: The command to execute.
+            args: Arguments to pass to the process.
+            cwd: The working directory of the process.
+            clear_env: Clear environment variables from parent process.
+            env: Environment variables to pass to the subprocess.
+            signal: An abort signal to cancel the process.
+            stdin: How stdin of the spawned process should be handled.
+            stdout: How stdout of the spawned process should be handled.
+            stderr: How stderr of the spawned process should be handled.
+            stdin_data: Data to write to stdin of the process.
+        """
+        async_child = self._bridge.run(
+            self._async.spawn(
+                command,
+                args=args,
+                cwd=cwd,
+                clear_env=clear_env,
+                env=env,
+                signal=signal,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                stdin_data=stdin_data,
+            )
+        )
         return ChildProcess(self._rpc, self._bridge, async_child)
 
     def fetch(
         self,
         url: str,
+        *,
         method: Optional[str] = "GET",
         headers: Optional[dict[str, str]] = None,
         redirect: Optional[Literal["follow", "manual"]] = None,
@@ -594,7 +904,9 @@ class Sandbox:
         """
         return self._bridge.run(self._async.extend_timeout(additional_s))
 
-    def expose_http(self, port: Optional[int] = None, pid: Optional[int] = None) -> str:
+    def expose_http(
+        self, *, port: Optional[int] = None, pid: Optional[int] = None
+    ) -> str:
         """Publicly expose a HTTP service via a publicly routeable URL.
 
         NOTE: when you call this API, the target HTTP service will be PUBLICLY
@@ -620,70 +932,3 @@ class Sandbox:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
-
-
-class AsyncVsCode:
-    """Experimental! A VSCode instance running inside the sandbox."""
-
-    def __init__(self, rpc: AsyncRpcClient, url: str):
-        self._rpc = rpc
-        self.url = url
-
-    @property
-    def stdout(self):
-        # FIXME
-        pass
-
-    @property
-    def stderr(self):
-        # FIXME
-        pass
-
-    def wait(self):
-        # FIXME
-        pass
-
-    async def kill(self) -> None:
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.kill()
-        await self.wait()
-
-
-class VsCode:
-    """Experimental! A VSCode instance running inside the sandbox."""
-
-    def __init__(
-        self, rpc: AsyncRpcClient, bridge: AsyncBridge, async_vscode: AsyncVsCode
-    ):
-        self._rpc = rpc
-        self._bridge = bridge
-        self._async = async_vscode
-
-    @property
-    def stdout(self):
-        # FIXME
-        pass
-
-    @property
-    def stderr(self):
-        # FIXME
-        pass
-
-    def wait(self):
-        # FIXME
-        pass
-
-    async def kill(self) -> None:
-        self._bridge.run(self._async.kill())
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.kill()
-        await self.wait()
