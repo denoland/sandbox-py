@@ -9,7 +9,6 @@ from typing import (
     BinaryIO,
     Iterable,
     Optional,
-    TypedDict,
     Union,
     cast,
 )
