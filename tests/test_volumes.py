@@ -2,7 +2,7 @@ import pytest
 import uuid
 
 from deno_sandbox import AsyncDenoDeploy, DenoDeploy
-from deno_sandbox.api_types_generated import Volume
+from deno_sandbox.volumes import Volume
 
 
 def gen_volume_name() -> str:

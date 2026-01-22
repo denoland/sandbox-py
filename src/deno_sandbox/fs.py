@@ -10,18 +10,13 @@ from typing import (
     Iterable,
     Literal,
     Optional,
+    TypedDict,
     Union,
     cast,
 )
 
 from re import Pattern
 
-from .api_types_generated import (
-    DirEntry,
-    FileInfo,
-    FsFileHandle,
-    WalkEntry,
-)
 from .process import AbortSignal
 from .stream import stream_data
 from .utils import convert_to_camel_case, convert_to_snake_case
@@ -29,6 +24,106 @@ from .utils import convert_to_camel_case, convert_to_snake_case
 if TYPE_CHECKING:
     from .rpc import AsyncRpcClient
     from .bridge import AsyncBridge
+
+
+class DirEntry(TypedDict):
+    name: str
+    """The file or directory name."""
+
+    is_file: bool
+    """Whether the entry is a file."""
+
+    is_directory: bool
+    """Whether the entry is a directory."""
+
+    is_symlink: bool
+    """Whether the entry is a symbolic link."""
+
+
+class FileInfo(TypedDict):
+    is_file: bool
+    """Whether the path is a file."""
+
+    is_directory: bool
+    """Whether the path is a directory."""
+
+    is_symlink: bool
+    """Whether the path is a symbolic link."""
+
+    size: int
+    """The size of the file in bytes."""
+
+    mtime: str
+    """The last modification time of the file."""
+
+    atime: str
+    """The last access time of the file."""
+
+    birthtime: str
+    """The creation time of the file."""
+
+    ctime: str
+    """The last status change time of the file."""
+
+    dev: int
+    """The device ID."""
+
+    ino: int
+    """The inode number."""
+
+    mode: int
+    """The file mode."""
+
+    nlink: int
+    """The number of hard links pointing to this file."""
+
+    uid: int
+    """The user ID of the owner."""
+
+    gid: int
+    """The group ID of the owner."""
+
+    rdev: int
+    """The device ID of this file."""
+
+    blksize: int
+    """The block size for filesystem I/O."""
+
+    blocks: int
+    """The number of blocks allocated in 512-byte units"""
+
+    is_block_device: bool
+    """Whether the path is a block device."""
+
+    is_char_device: bool
+    """Whether the path is a character device."""
+
+    is_fifo: bool
+    """Whether the path is a FIFO."""
+
+    is_socket: bool
+    """Whether the path is a socket."""
+
+
+class WalkEntry(TypedDict):
+    path: str
+    """The full path of the entry."""
+
+    name: str
+    """The file or directory name."""
+
+    is_file: bool
+    """Whether the entry is a file."""
+
+    is_directory: bool
+    """Whether the entry is a directory."""
+
+    is_symlink: bool
+    """Whether the entry is a symbolic link."""
+
+
+class FsFileHandle(TypedDict):
+    file_handle_id: int
 
 
 class AsyncFsFile:

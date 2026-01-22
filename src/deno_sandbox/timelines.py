@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
 from typing_extensions import Optional
 
-from .api_types_generated import (
-    Timeline,
-)
 
 from .bridge import AsyncBridge
 from .console import (
@@ -13,6 +10,38 @@ from .console import (
     AsyncPaginatedList,
     PaginatedList,
 )
+
+
+class TimelineApp(TypedDict):
+    id: str
+    """The unique identifier for the app."""
+
+    slug: str
+    """The human readable identifier for the app."""
+
+
+class TimelineContext(TypedDict):
+    slug: str
+
+
+class Domain(TypedDict):
+    domain: str
+    """The domain name."""
+
+
+class Timeline(TypedDict):
+    slug: str
+    """The unique identifier for the timeline."""
+
+    partition: dict[str, str]
+    """The partition of the timeline."""
+
+    app: TimelineApp
+    context: TimelineContext
+    """The context of the timeline."""
+
+    domains: list[Domain]
+    """The domains associated with the timeline."""
 
 
 class AsyncTimelines:

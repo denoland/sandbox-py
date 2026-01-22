@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from typing_extensions import Optional
 
 from .bridge import AsyncBridge
@@ -10,10 +10,49 @@ from .console import (
     PaginatedList,
 )
 
-from .api_types_generated import (
-    Snapshot,
-)
 from .utils import convert_to_snake_case
+
+
+class BaseSnapshot(TypedDict):
+    id: str
+    """The unique identifier for the snapshot."""
+
+    slug: str
+    """Human readable identifier for the snapshot."""
+
+
+class Snapshot(TypedDict):
+    id: str
+    """The unique identifier for the snapshot."""
+
+    slug: str
+    """The human readable identifier for the snapshot."""
+
+    region: str
+    """The region the snapshot is located in."""
+
+    allocated_size: int
+    """
+  The number of bytes currently allocated specifically for the snapshot.
+
+  Snapshots created from other snapshots only store data that is different
+  from their base snapshot, so this size may be smaller than the actual size
+  of the file system on the snapshot.
+  This is not the total size of the snapshot.
+  """
+
+    flattened_size: int
+    """
+  The total size of the file system on the snapshot, in bytes. This is the size the snapshot would take up if it were fully "flattened" (i.e., if all data from any snapshots it was created from were fully stored in this snapshot).
+
+  Snapshots created from other snapshots only store data that is different from their base snapshot, so this size may be larger than the amount of data actually allocated for the snapshot.
+  """
+
+    is_bootable: bool
+    """Whether the snapshot is bootable."""
+
+    base_snapshot: BaseSnapshot
+    """The snapshot the volume was created from."""
 
 
 class AsyncSnapshots:

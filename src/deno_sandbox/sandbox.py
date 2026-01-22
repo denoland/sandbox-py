@@ -32,9 +32,6 @@ from .process import (
     ProcessSpawnResult,
     RemoteProcessOptions,
 )
-from .api_types_generated import (
-    SandboxMeta,
-)
 from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
@@ -50,6 +47,23 @@ from .transport import (
 
 Mode: TypeAlias = Literal["connect", "create"]
 StdIo: TypeAlias = Literal["piped", "null"]
+
+
+class SandboxMeta(TypedDict):
+    id: str
+    """The unique identifier for the sandbox."""
+
+    created_at: str
+    """The ISO 8601 timestamp when the sandbox was created."""
+
+    region: str
+    """The region the sandbox is located in."""
+
+    status: Literal["running", "stopped"]
+    """The status of the sandbox."""
+
+    stopped_at: NotRequired[str | None]
+    """The ISO 8601 timestamp when the sandbox was stopped."""
 
 
 class SecretConfig(TypedDict):
