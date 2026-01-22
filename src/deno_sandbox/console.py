@@ -12,20 +12,11 @@ from typing import (
 )
 import httpx
 
-from .api_types_generated import (
-    RevisionWithoutTimelines,
-    Timeline,
-)
 from .bridge import AsyncBridge
 from .options import InternalOptions
 from .utils import convert_to_snake_case, parse_link_header
 
 T = TypeVar("T")
-
-
-class Revision(RevisionWithoutTimelines):
-    timelines: list[Timeline]
-    """The timelines associated with the revision."""
 
 
 class ExposeSSHResult(TypedDict):

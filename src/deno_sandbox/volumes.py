@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Union, cast
-from typing_extensions import Optional
+from typing import Any, TypedDict, Union, cast
+from typing_extensions import Optional, NotRequired
 
-from .api_types_generated import (
-    Volume,
-    Snapshot,
-)
+from .snapshots import BaseSnapshot, Snapshot
+
 from .utils import convert_to_snake_case
 
 from .bridge import AsyncBridge
@@ -15,6 +13,49 @@ from .console import (
     AsyncPaginatedList,
     PaginatedList,
 )
+
+
+class Volume(TypedDict):
+    id: str
+    """The unique identifier for the volume."""
+
+    slug: str
+    """Human readable identifier for the volume."""
+
+    region: str
+    """The region the volume is located in."""
+
+    capacity: int
+    """The capacity of the volume in bytes."""
+
+    estimated_allocated_size: int
+    """
+  The number of bytes currently allocated specifically for the volume.
+
+  Volumes created from snapshots are "copy-on-write", so this size may be
+  smaller than the actual size of the file system on the volume, as it does
+  not include data shared with any snapshots the volume was created from.
+
+  This is an estimate, and may lag real-time usage by multiple minutes.
+  """
+
+    estimated_flattened_size: int
+    """
+  The total size of the file system on the volume, in bytes. This is the size
+  the volume would take up if it were fully "flattened" (i.e., if all data
+  from any snapshots it was created from were fully copied to the volume).
+
+  Volumes created from snapshots are "copy-on-write", so this size may be
+  larger than the amount of data actually allocated for the volume.
+
+  This is an estimate, and may lag real-time usage by multiple minutes.
+  """
+
+    is_bootable: bool
+    """Whether the volume is bootable."""
+
+    base_snapshot: NotRequired[BaseSnapshot | None]
+    """The snapshot the volume was created from."""
 
 
 class AsyncVolumes:

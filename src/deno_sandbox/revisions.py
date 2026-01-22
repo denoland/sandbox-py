@@ -1,19 +1,36 @@
 from __future__ import annotations
 
-from typing import Any, cast
-from typing_extensions import Optional
+from typing import Any, TypedDict, cast
+from typing_extensions import Literal, Optional
 
-from .api_types_generated import (
-    RevisionWithoutTimelines,
-)
+from deno_sandbox.timelines import Timeline
+
 from .bridge import AsyncBridge
 from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
     PaginatedList,
-    Revision,
 )
 from .utils import convert_to_snake_case
+
+
+class RevisionWithoutTimelines(TypedDict):
+    id: str
+    """The unique identifier for the revision."""
+
+    status: Literal["building", "ready", "error"]
+    """The status of the revision."""
+
+    created_at: str
+    """The ISO 8601 timestamp when the revision was created."""
+
+    updated_at: str
+    """The ISO 8601 timestamp when the revision was last updated."""
+
+
+class Revision(RevisionWithoutTimelines):
+    timelines: list[Timeline]
+    """The timelines associated with the revision."""
 
 
 class AsyncRevisions:

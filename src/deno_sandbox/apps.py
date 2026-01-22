@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from typing_extensions import Optional
 
-from .api_types_generated import (
-    App,
-)
 from .utils import convert_to_snake_case
 from .bridge import AsyncBridge
 from .console import (
@@ -13,6 +10,20 @@ from .console import (
     AsyncConsoleClient,
     AsyncPaginatedList,
 )
+
+
+class App(TypedDict):
+    id: str
+    """The unique identifier for the app."""
+
+    slug: str
+    """The human readable identifier for the app."""
+
+    created_at: str
+    """The ISO 8601 timestamp when the app was created."""
+
+    updated_at: str
+    """The ISO 8601 timestamp when the app was last updated."""
 
 
 class AsyncApps:
