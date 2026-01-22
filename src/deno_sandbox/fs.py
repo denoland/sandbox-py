@@ -8,27 +8,21 @@ from typing import (
     AsyncIterable,
     BinaryIO,
     Iterable,
+    Literal,
     Optional,
     Union,
     cast,
 )
 
+from re import Pattern
+
 from .api_types_generated import (
     DirEntry,
-    ExpandGlobOptions,
     FileInfo,
     FsFileHandle,
-    FsOpenOptions,
-    MakeTempDirOptions,
-    MakeTempFileOptions,
-    MkdirOptions,
-    ReadFileOptions,
-    RemoveOptions,
-    SymlinkOptions,
     WalkEntry,
-    WalkOptions,
-    WriteFileOptions,
 )
+from .process import AbortSignal
 from .stream import stream_data
 from .utils import convert_to_camel_case, convert_to_snake_case
 
@@ -184,12 +178,22 @@ class AsyncSandboxFs:
         self._rpc = rpc
 
     async def read_file(
-        self, path: str, options: Optional[ReadFileOptions] = None
+        self,
+        path: str,
+        *,
+        signal: Optional[AbortSignal] = None,
     ) -> bytes:
-        """Reads the entire contents of a file as bytes."""
+        """Reads the entire contents of a file as bytes.
 
+        Args:
+            path: The path to the file to read.
+            signal: An optional abort signal to cancel the operation.
+        """
         params: dict[str, Any] = {"path": path}
-        if options is not None:
+        options: dict[str, Any] = {}
+        if signal is not None:
+            options["signal"] = signal
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("readFile", params)
@@ -201,10 +205,22 @@ class AsyncSandboxFs:
         self,
         path: str,
         data: Union[bytes, AsyncIterable[bytes], Iterable[bytes], BinaryIO],
-        options: Optional[WriteFileOptions] = None,
+        *,
+        create: Optional[bool] = None,
+        append: Optional[bool] = None,
+        create_new: Optional[bool] = None,
+        mode: Optional[int] = None,
     ) -> None:
-        """Write bytes to file. Accepts bytes, async/sync iterables, or file objects."""
+        """Write bytes to file. Accepts bytes, async/sync iterables, or file objects.
 
+        Args:
+            path: The path to the file to write.
+            data: The data to write to the file.
+            create: Create file if it doesn't already exist.
+            append: Append content instead of overwriting existing contents.
+            create_new: Fail if the file already exists.
+            mode: Set the file permission mode.
+        """
         if isinstance(data, bytes):
             # Stream bytes as a single chunk
             content_stream_id = await stream_data(self._rpc, iter([data]))
@@ -213,17 +229,36 @@ class AsyncSandboxFs:
             content_stream_id = await stream_data(self._rpc, data)
 
         params: dict[str, Any] = {"path": path, "contentStreamId": content_stream_id}
-        if options is not None:
+        options: dict[str, Any] = {}
+        if create is not None:
+            options["create"] = create
+        if append is not None:
+            options["append"] = append
+        if create_new is not None:
+            options["create_new"] = create_new
+        if mode is not None:
+            options["mode"] = mode
+        if options:
             params["options"] = convert_to_camel_case(options)
         await self._rpc.call("writeFile", params)
 
     async def read_text_file(
-        self, path: str, options: Optional[ReadFileOptions] = None
+        self,
+        path: str,
+        *,
+        signal: Optional[AbortSignal] = None,
     ) -> str:
-        """Reads the entire contents of a file as an UTF-8 decoded string."""
+        """Reads the entire contents of a file as an UTF-8 decoded string.
 
-        params = {"path": path}
-        if options is not None:
+        Args:
+            path: The path to the file to read.
+            signal: An optional abort signal to cancel the operation.
+        """
+        params: dict[str, Any] = {"path": path}
+        options: dict[str, Any] = {}
+        if signal is not None:
+            options["signal"] = signal
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("readTextFile", params)
@@ -231,12 +266,36 @@ class AsyncSandboxFs:
         return result
 
     async def write_text_file(
-        self, path: str, content: str, options: Optional[WriteFileOptions] = None
+        self,
+        path: str,
+        content: str,
+        *,
+        create: Optional[bool] = None,
+        append: Optional[bool] = None,
+        create_new: Optional[bool] = None,
+        mode: Optional[int] = None,
     ) -> None:
-        """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
+        """Write text to file. Creates a new file if needed. Existing files will be overwritten.
 
-        params = {"path": path, "content": content}
-        if options is not None:
+        Args:
+            path: The path to the file to write.
+            content: The text content to write.
+            create: Create file if it doesn't already exist.
+            append: Append content instead of overwriting existing contents.
+            create_new: Fail if the file already exists.
+            mode: Set the file permission mode.
+        """
+        params: dict[str, Any] = {"path": path, "content": content}
+        options: dict[str, Any] = {}
+        if create is not None:
+            options["create"] = create
+        if append is not None:
+            options["append"] = append
+        if create_new is not None:
+            options["create_new"] = create_new
+        if mode is not None:
+            options["mode"] = mode
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         await self._rpc.call("writeTextFile", params)
@@ -249,20 +308,48 @@ class AsyncSandboxFs:
 
         return result
 
-    async def remove(self, path: str, options: Optional[RemoveOptions] = None) -> None:
-        """Remove the file or directory at the given path."""
+    async def remove(
+        self,
+        path: str,
+        *,
+        recursive: Optional[bool] = None,
+    ) -> None:
+        """Remove the file or directory at the given path.
 
-        params = {"path": path}
-        if options is not None:
+        Args:
+            path: The path to the file or directory to remove.
+            recursive: Whether to remove directories recursively. Default: false.
+        """
+        params: dict[str, Any] = {"path": path}
+        options: dict[str, Any] = {}
+        if recursive is not None:
+            options["recursive"] = recursive
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         await self._rpc.call("remove", params)
 
-    async def mkdir(self, path: str, options: Optional[MkdirOptions] = None) -> None:
-        """Create a new directory at the specified path."""
+    async def mkdir(
+        self,
+        path: str,
+        *,
+        recursive: Optional[bool] = None,
+        mode: Optional[int] = None,
+    ) -> None:
+        """Create a new directory at the specified path.
 
-        params = {"path": path}
-        if options is not None:
+        Args:
+            path: The path to the directory to create.
+            recursive: If true, parent directories will be created if they do not already exist.
+            mode: Permissions to use for the new directory.
+        """
+        params: dict[str, Any] = {"path": path}
+        options: dict[str, Any] = {}
+        if recursive is not None:
+            options["recursive"] = recursive
+        if mode is not None:
+            options["mode"] = mode
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         await self._rpc.call("mkdir", params)
@@ -303,12 +390,54 @@ class AsyncSandboxFs:
         await self._rpc.call("copyFile", params)
 
     async def walk(
-        self, path: str, options: Optional[WalkOptions] = None
+        self,
+        path: str,
+        *,
+        max_depth: Optional[int] = None,
+        include_files: Optional[bool] = None,
+        include_dirs: Optional[bool] = None,
+        include_symlinks: Optional[bool] = None,
+        follow_symlinks: Optional[bool] = None,
+        canonicalize: Optional[bool] = None,
+        exts: Optional[list[str]] = None,
+        match: Optional[list[Pattern]] = None,
+        skip: Optional[list[Pattern]] = None,
     ) -> list[WalkEntry]:
-        """Recursively walk a directory tree."""
+        """Recursively walk a directory tree.
 
-        params = {"path": path}
-        if options is not None:
+        Args:
+            path: The path to the directory to walk.
+            max_depth: The maximum depth to traverse. Default: Infinity.
+            include_files: Whether to include files in the results. Default: true.
+            include_dirs: Whether to include directories in the results. Default: true.
+            include_symlinks: Whether to include symbolic links in the results. Default: true.
+            follow_symlinks: Whether to follow symbolic links. Default: false.
+            canonicalize: Whether to return canonicalized paths. This option works only if `follow_symlinks` is not `false`. Default: false.
+            exts: If provided, only files with the specified extensions will be included. Example: ['.ts', '.js']
+            match: List of regular expression patterns used to filter entries. If specified, entries that do not match the patterns specified by this option are excluded.
+            skip: List of regular expression patterns used to filter entries. If specified, entries that match the patterns specified by this option are excluded.
+        """
+        params: dict[str, Any] = {"path": path}
+        options: dict[str, Any] = {}
+        if max_depth is not None:
+            options["max_depth"] = max_depth
+        if include_files is not None:
+            options["include_files"] = include_files
+        if include_dirs is not None:
+            options["include_dirs"] = include_dirs
+        if include_symlinks is not None:
+            options["include_symlinks"] = include_symlinks
+        if follow_symlinks is not None:
+            options["follow_symlinks"] = follow_symlinks
+        if canonicalize is not None:
+            options["canonicalize"] = canonicalize
+        if exts is not None:
+            options["exts"] = exts
+        if match is not None:
+            options["match"] = match
+        if skip is not None:
+            options["skip"] = skip
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("walk", params)
@@ -316,12 +445,50 @@ class AsyncSandboxFs:
         return result
 
     async def expand_glob(
-        self, glob: str, options: Optional[ExpandGlobOptions] = None
+        self,
+        glob: str,
+        *,
+        root: Optional[str] = None,
+        exclude: Optional[list[str]] = None,
+        include_dirs: Optional[bool] = None,
+        follow_symlinks: Optional[bool] = None,
+        canonicalize: Optional[bool] = None,
+        extended: Optional[bool] = None,
+        globstar: Optional[bool] = None,
+        case_insensitive: Optional[bool] = None,
     ) -> list[str]:
-        """Expand a glob pattern to a list of paths."""
+        """Expand a glob pattern to a list of paths.
 
-        params = {"glob": glob}
-        if options is not None:
+        Args:
+            glob: The glob pattern to expand.
+            root: The root directory from which to expand the glob pattern. Default is the current working directory.
+            exclude: An array of glob patterns to exclude from the results.
+            include_dirs: Whether to include directories in the results. Default: true.
+            follow_symlinks: Whether to follow symbolic links. Default: false.
+            canonicalize: Whether to return canonicalized paths. This option works only if `follow_symlinks` is not `false`. Default: true.
+            extended: Whether to enable extended glob syntax, see https://www.linuxjournal.com/content/bash-extended-globbing. Default: true.
+            globstar: Globstar syntax. See https://www.linuxjournal.com/content/globstar-new-bash-globbing-option. If false, `**` is treated like `*`. Default: true.
+            case_insensitive: Whether the glob matching should be case insensitive. Default: false.
+        """
+        params: dict[str, Any] = {"glob": glob}
+        options: dict[str, Any] = {}
+        if root is not None:
+            options["root"] = root
+        if exclude is not None:
+            options["exclude"] = exclude
+        if include_dirs is not None:
+            options["include_dirs"] = include_dirs
+        if follow_symlinks is not None:
+            options["follow_symlinks"] = follow_symlinks
+        if canonicalize is not None:
+            options["canonicalize"] = canonicalize
+        if extended is not None:
+            options["extended"] = extended
+        if globstar is not None:
+            options["globstar"] = globstar
+        if case_insensitive is not None:
+            options["case_insensitive"] = case_insensitive
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("expandGlob", params)
@@ -343,11 +510,29 @@ class AsyncSandboxFs:
         raw_result = convert_to_snake_case(result)
         return cast(FileInfo, raw_result)
 
-    async def make_temp_dir(self, options: Optional[MakeTempDirOptions] = None) -> str:
-        """Create a new temporary directory."""
+    async def make_temp_dir(
+        self,
+        *,
+        dir: Optional[str] = None,
+        prefix: Optional[str] = None,
+        suffix: Optional[str] = None,
+    ) -> str:
+        """Create a new temporary directory.
 
-        params = {}
-        if options is not None:
+        Args:
+            dir: The directory where the temporary directory should be created.
+            prefix: The prefix for the temporary directory name.
+            suffix: The suffix for the temporary directory name.
+        """
+        params: dict[str, Any] = {}
+        options: dict[str, Any] = {}
+        if dir is not None:
+            options["dir"] = dir
+        if prefix is not None:
+            options["prefix"] = prefix
+        if suffix is not None:
+            options["suffix"] = suffix
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("makeTempDir", params)
@@ -355,12 +540,28 @@ class AsyncSandboxFs:
         return result
 
     async def make_temp_file(
-        self, options: Optional[MakeTempFileOptions] = None
+        self,
+        *,
+        dir: Optional[str] = None,
+        prefix: Optional[str] = None,
+        suffix: Optional[str] = None,
     ) -> str:
-        """Create a new temporary file."""
+        """Create a new temporary file.
 
-        params = {}
-        if options is not None:
+        Args:
+            dir: The directory where the temporary file should be created.
+            prefix: The prefix for the temporary file name.
+            suffix: The suffix for the temporary file name.
+        """
+        params: dict[str, Any] = {}
+        options: dict[str, Any] = {}
+        if dir is not None:
+            options["dir"] = dir
+        if prefix is not None:
+            options["prefix"] = prefix
+        if suffix is not None:
+            options["suffix"] = suffix
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("makeTempFile", params)
@@ -384,12 +585,24 @@ class AsyncSandboxFs:
         return result
 
     async def symlink(
-        self, target: str, path: str, options: Optional[SymlinkOptions] = None
+        self,
+        target: str,
+        path: str,
+        *,
+        type: Optional[Literal["file", "dir", "junction"]] = None,
     ) -> None:
-        """Create a symbolic link."""
+        """Create a symbolic link.
 
-        params = {"target": target, "path": path}
-        if options is not None:
+        Args:
+            target: The target path of the symbolic link.
+            path: The path where the symbolic link should be created.
+            type: The type of the symbolic link (file, dir, or junction).
+        """
+        params: dict[str, Any] = {"target": target, "path": path}
+        options: dict[str, Any] = {}
+        if type is not None:
+            options["type"] = type
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         await self._rpc.call("symlink", params)
@@ -430,7 +643,7 @@ class AsyncSandboxFs:
             await self.symlink(target, sandbox_path)
         elif os.path.isdir(local_path):
             # It's a directory - create it and recursively upload contents
-            await self.mkdir(sandbox_path, {"recursive": True})
+            await self.mkdir(sandbox_path, recursive=True)
             for entry in os.listdir(local_path):
                 entry_local_path = os.path.join(local_path, entry)
                 entry_sandbox_path = f"{sandbox_path}/{entry}"
@@ -460,12 +673,46 @@ class AsyncSandboxFs:
         return AsyncFsFile(self._rpc, handle["file_handle_id"])
 
     async def open(
-        self, path: str, options: Optional[FsOpenOptions] = None
+        self,
+        path: str,
+        *,
+        read: Optional[bool] = None,
+        write: Optional[bool] = None,
+        append: Optional[bool] = None,
+        truncate: Optional[bool] = None,
+        create: Optional[bool] = None,
+        create_new: Optional[bool] = None,
+        mode: Optional[int] = None,
     ) -> AsyncFsFile:
-        """Open a file and return a file descriptor."""
+        """Open a file and return a file descriptor.
 
-        params = {"path": path}
-        if options is not None:
+        Args:
+            path: The path to the file to open.
+            read: Sets the option for read access. This option, when `true`, means that the file should be read-able if opened. Default: true.
+            write: Sets the option for write access. This option, when `true`, means that the file should be write-able if opened. Default: false.
+            append: Sets the option for append mode. This option, when `true`, means that writes to the file will always append to the end. Default: false.
+            truncate: If `true`, and the file already exists and is a regular file, it will be truncated to length 0 when opened. Default: false.
+            create: If `true`, the file will be created if it does not already exist. Default: false.
+            create_new: If `true`, the file will be created if it does not already exist. Default: false.
+            mode: The permission mode to use when creating the file.
+        """
+        params: dict[str, Any] = {"path": path}
+        options: dict[str, Any] = {}
+        if read is not None:
+            options["read"] = read
+        if write is not None:
+            options["write"] = write
+        if append is not None:
+            options["append"] = append
+        if truncate is not None:
+            options["truncate"] = truncate
+        if create is not None:
+            options["create"] = create
+        if create_new is not None:
+            options["create_new"] = create_new
+        if mode is not None:
+            options["mode"] = mode
+        if options:
             params["options"] = convert_to_camel_case(options)
 
         result = await self._rpc.call("open", params)
@@ -484,42 +731,129 @@ class SandboxFs:
         self._bridge = bridge
         self._async = AsyncSandboxFs(rpc)
 
-    def read_file(self, path: str, options: Optional[ReadFileOptions] = None) -> bytes:
-        """Reads the entire contents of a file as bytes."""
-        return self._bridge.run(self._async.read_file(path, options))
+    def read_file(
+        self,
+        path: str,
+        *,
+        signal: Optional[AbortSignal] = None,
+    ) -> bytes:
+        """Reads the entire contents of a file as bytes.
+
+        Args:
+            path: The path to the file to read.
+            signal: An optional abort signal to cancel the operation.
+        """
+        return self._bridge.run(self._async.read_file(path, signal=signal))
 
     def write_file(
         self,
         path: str,
         data: Union[bytes, Iterable[bytes], BinaryIO],
-        options: Optional[WriteFileOptions] = None,
+        *,
+        create: Optional[bool] = None,
+        append: Optional[bool] = None,
+        create_new: Optional[bool] = None,
+        mode: Optional[int] = None,
     ) -> None:
-        """Write bytes to file. Accepts bytes, sync iterables, or file objects."""
-        self._bridge.run(self._async.write_file(path, data, options))
+        """Write bytes to file. Accepts bytes, sync iterables, or file objects.
+
+        Args:
+            path: The path to the file to write.
+            data: The data to write to the file.
+            create: Create file if it doesn't already exist.
+            append: Append content instead of overwriting existing contents.
+            create_new: Fail if the file already exists.
+            mode: Set the file permission mode.
+        """
+        self._bridge.run(
+            self._async.write_file(
+                path,
+                data,
+                create=create,
+                append=append,
+                create_new=create_new,
+                mode=mode,
+            )
+        )
 
     def read_text_file(
-        self, path: str, options: Optional[ReadFileOptions] = None
+        self,
+        path: str,
+        *,
+        signal: Optional[AbortSignal] = None,
     ) -> str:
-        """Reads the entire contents of a file as an UTF-8 decoded string."""
-        return self._bridge.run(self._async.read_text_file(path, options))
+        """Reads the entire contents of a file as an UTF-8 decoded string.
+
+        Args:
+            path: The path to the file to read.
+            signal: An optional abort signal to cancel the operation.
+        """
+        return self._bridge.run(self._async.read_text_file(path, signal=signal))
 
     def write_text_file(
-        self, path: str, content: str, options: Optional[WriteFileOptions] = None
+        self,
+        path: str,
+        content: str,
+        *,
+        create: Optional[bool] = None,
+        append: Optional[bool] = None,
+        create_new: Optional[bool] = None,
+        mode: Optional[int] = None,
     ) -> None:
-        """Write text to file. Creates a new file if needed. Existing files will be overwritten."""
-        self._bridge.run(self._async.write_text_file(path, content, options))
+        """Write text to file. Creates a new file if needed. Existing files will be overwritten.
+
+        Args:
+            path: The path to the file to write.
+            content: The text content to write.
+            create: Create file if it doesn't already exist.
+            append: Append content instead of overwriting existing contents.
+            create_new: Fail if the file already exists.
+            mode: Set the file permission mode.
+        """
+        self._bridge.run(
+            self._async.write_text_file(
+                path,
+                content,
+                create=create,
+                append=append,
+                create_new=create_new,
+                mode=mode,
+            )
+        )
 
     def read_dir(self, path: str) -> list[DirEntry]:
         """Read the directory entries at the given path."""
         return self._bridge.run(self._async.read_dir(path))
 
-    def remove(self, path: str, options: Optional[RemoveOptions] = None) -> None:
-        """Remove the file or directory at the given path."""
-        self._bridge.run(self._async.remove(path, options))
+    def remove(
+        self,
+        path: str,
+        *,
+        recursive: Optional[bool] = None,
+    ) -> None:
+        """Remove the file or directory at the given path.
 
-    def mkdir(self, path: str, options: Optional[MkdirOptions] = None) -> None:
-        """Create a new directory at the specified path."""
-        self._bridge.run(self._async.mkdir(path, options))
+        Args:
+            path: The path to the file or directory to remove.
+            recursive: Whether to remove directories recursively. Default: false.
+        """
+        self._bridge.run(self._async.remove(path, recursive=recursive))
+
+    def mkdir(
+        self,
+        path: str,
+        *,
+        recursive: Optional[bool] = None,
+        mode: Optional[int] = None,
+    ) -> None:
+        """Create a new directory at the specified path.
+
+        Args:
+            path: The path to the directory to create.
+            recursive: If true, parent directories will be created if they do not already exist.
+            mode: Permissions to use for the new directory.
+        """
+        self._bridge.run(self._async.mkdir(path, recursive=recursive, mode=mode))
 
     def rename(self, old_path: str, new_path: str) -> None:
         """Rename (move) a file or directory."""
@@ -543,15 +877,88 @@ class SandboxFs:
         """Copy a file from a source path to a destination path."""
         self._bridge.run(self._async.copy_file(from_path, to_path))
 
-    def walk(self, path: str, options: Optional[WalkOptions] = None) -> list[WalkEntry]:
-        """Recursively walk a directory tree."""
-        return self._bridge.run(self._async.walk(path, options))
+    def walk(
+        self,
+        path: str,
+        *,
+        max_depth: Optional[int] = None,
+        include_files: Optional[bool] = None,
+        include_dirs: Optional[bool] = None,
+        include_symlinks: Optional[bool] = None,
+        follow_symlinks: Optional[bool] = None,
+        canonicalize: Optional[bool] = None,
+        exts: Optional[list[str]] = None,
+        match: Optional[list[Pattern]] = None,
+        skip: Optional[list[Pattern]] = None,
+    ) -> list[WalkEntry]:
+        """Recursively walk a directory tree.
+
+        Args:
+            path: The path to the directory to walk.
+            max_depth: The maximum depth to traverse. Default: Infinity.
+            include_files: Whether to include files in the results. Default: true.
+            include_dirs: Whether to include directories in the results. Default: true.
+            include_symlinks: Whether to include symbolic links in the results. Default: true.
+            follow_symlinks: Whether to follow symbolic links. Default: false.
+            canonicalize: Whether to return canonicalized paths. This option works only if `follow_symlinks` is not `false`. Default: false.
+            exts: If provided, only files with the specified extensions will be included. Example: ['.ts', '.js']
+            match: List of regular expression patterns used to filter entries. If specified, entries that do not match the patterns specified by this option are excluded.
+            skip: List of regular expression patterns used to filter entries. If specified, entries that match the patterns specified by this option are excluded.
+        """
+        return self._bridge.run(
+            self._async.walk(
+                path,
+                max_depth=max_depth,
+                include_files=include_files,
+                include_dirs=include_dirs,
+                include_symlinks=include_symlinks,
+                follow_symlinks=follow_symlinks,
+                canonicalize=canonicalize,
+                exts=exts,
+                match=match,
+                skip=skip,
+            )
+        )
 
     def expand_glob(
-        self, glob: str, options: Optional[ExpandGlobOptions] = None
+        self,
+        glob: str,
+        *,
+        root: Optional[str] = None,
+        exclude: Optional[list[str]] = None,
+        include_dirs: Optional[bool] = None,
+        follow_symlinks: Optional[bool] = None,
+        canonicalize: Optional[bool] = None,
+        extended: Optional[bool] = None,
+        globstar: Optional[bool] = None,
+        case_insensitive: Optional[bool] = None,
     ) -> list[str]:
-        """Expand a glob pattern to a list of paths."""
-        return self._bridge.run(self._async.expand_glob(glob, options))
+        """Expand a glob pattern to a list of paths.
+
+        Args:
+            glob: The glob pattern to expand.
+            root: The root directory from which to expand the glob pattern. Default is the current working directory.
+            exclude: An array of glob patterns to exclude from the results.
+            include_dirs: Whether to include directories in the results. Default: true.
+            follow_symlinks: Whether to follow symbolic links. Default: false.
+            canonicalize: Whether to return canonicalized paths. This option works only if `follow_symlinks` is not `false`. Default: true.
+            extended: Whether to enable extended glob syntax, see https://www.linuxjournal.com/content/bash-extended-globbing. Default: true.
+            globstar: Globstar syntax. See https://www.linuxjournal.com/content/globstar-new-bash-globbing-option. If false, `**` is treated like `*`. Default: true.
+            case_insensitive: Whether the glob matching should be case insensitive. Default: false.
+        """
+        return self._bridge.run(
+            self._async.expand_glob(
+                glob,
+                root=root,
+                exclude=exclude,
+                include_dirs=include_dirs,
+                follow_symlinks=follow_symlinks,
+                canonicalize=canonicalize,
+                extended=extended,
+                globstar=globstar,
+                case_insensitive=case_insensitive,
+            )
+        )
 
     def link(self, target: str, path: str) -> None:
         """Create a hard link pointing to an existing file."""
@@ -561,13 +968,41 @@ class SandboxFs:
         """Return file information about a file or directory symlink."""
         return self._bridge.run(self._async.lstat(path))
 
-    def make_temp_dir(self, options: Optional[MakeTempDirOptions] = None) -> str:
-        """Create a new temporary directory."""
-        return self._bridge.run(self._async.make_temp_dir(options))
+    def make_temp_dir(
+        self,
+        *,
+        dir: Optional[str] = None,
+        prefix: Optional[str] = None,
+        suffix: Optional[str] = None,
+    ) -> str:
+        """Create a new temporary directory.
 
-    def make_temp_file(self, options: Optional[MakeTempFileOptions] = None) -> str:
-        """Create a new temporary file."""
-        return self._bridge.run(self._async.make_temp_file(options))
+        Args:
+            dir: The directory where the temporary directory should be created.
+            prefix: The prefix for the temporary directory name.
+            suffix: The suffix for the temporary directory name.
+        """
+        return self._bridge.run(
+            self._async.make_temp_dir(dir=dir, prefix=prefix, suffix=suffix)
+        )
+
+    def make_temp_file(
+        self,
+        *,
+        dir: Optional[str] = None,
+        prefix: Optional[str] = None,
+        suffix: Optional[str] = None,
+    ) -> str:
+        """Create a new temporary file.
+
+        Args:
+            dir: The directory where the temporary file should be created.
+            prefix: The prefix for the temporary file name.
+            suffix: The suffix for the temporary file name.
+        """
+        return self._bridge.run(
+            self._async.make_temp_file(dir=dir, prefix=prefix, suffix=suffix)
+        )
 
     def read_link(self, path: str) -> str:
         """Read the target of a symbolic link."""
@@ -578,10 +1013,20 @@ class SandboxFs:
         return self._bridge.run(self._async.real_path(path))
 
     def symlink(
-        self, target: str, path: str, options: Optional[SymlinkOptions] = None
+        self,
+        target: str,
+        path: str,
+        *,
+        type: Optional[Literal["file", "dir", "junction"]] = None,
     ) -> None:
-        """Create a symbolic link."""
-        self._bridge.run(self._async.symlink(target, path, options))
+        """Create a symbolic link.
+
+        Args:
+            target: The target path of the symbolic link.
+            path: The path where the symbolic link should be created.
+            type: The type of the symbolic link (file, dir, or junction).
+        """
+        self._bridge.run(self._async.symlink(target, path, type=type))
 
     def truncate(self, name: str, length: Optional[int] = None) -> None:
         """Truncate or extend the specified file to reach a given size."""
@@ -608,7 +1053,40 @@ class SandboxFs:
         async_file = self._bridge.run(self._async.create(path))
         return FsFile(self._rpc, self._bridge, async_file._fd)
 
-    def open(self, path: str, options: Optional[FsOpenOptions] = None) -> FsFile:
-        """Open a file and return a file descriptor."""
-        async_file = self._bridge.run(self._async.open(path, options))
+    def open(
+        self,
+        path: str,
+        *,
+        read: Optional[bool] = None,
+        write: Optional[bool] = None,
+        append: Optional[bool] = None,
+        truncate: Optional[bool] = None,
+        create: Optional[bool] = None,
+        create_new: Optional[bool] = None,
+        mode: Optional[int] = None,
+    ) -> FsFile:
+        """Open a file and return a file descriptor.
+
+        Args:
+            path: The path to the file to open.
+            read: Sets the option for read access. This option, when `true`, means that the file should be read-able if opened. Default: true.
+            write: Sets the option for write access. This option, when `true`, means that the file should be write-able if opened. Default: false.
+            append: Sets the option for append mode. This option, when `true`, means that writes to the file will always append to the end. Default: false.
+            truncate: If `true`, and the file already exists and is a regular file, it will be truncated to length 0 when opened. Default: false.
+            create: If `true`, the file will be created if it does not already exist. Default: false.
+            create_new: If `true`, the file will be created if it does not already exist. Default: false.
+            mode: The permission mode to use when creating the file.
+        """
+        async_file = self._bridge.run(
+            self._async.open(
+                path,
+                read=read,
+                write=write,
+                append=append,
+                truncate=truncate,
+                create=create,
+                create_new=create_new,
+                mode=mode,
+            )
+        )
         return FsFile(self._rpc, self._bridge, async_file._fd)
