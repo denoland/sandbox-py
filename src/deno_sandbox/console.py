@@ -5,22 +5,10 @@ from typing import Any, Generic, Literal, Optional, TypedDict, TypeVar, cast
 import httpx
 
 from .api_types_generated import (
-    App,
-    AppInit,
-    AppListOptions,
-    AppUpdate,
-    RevisionListOptions,
     RevisionWithoutTimelines,
     SandboxListOptions,
     SandboxMeta,
-    Snapshot,
-    SnapshotInit,
-    SnapshotListOptions,
     Timeline,
-    TimelineListOptions,
-    Volume,
-    VolumeInit,
-    VolumeListOptions,
 )
 from .bridge import AsyncBridge
 from .options import InternalOptions
@@ -230,114 +218,7 @@ class AsyncConsoleClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    # Proxy methods
-    async def _apps_create(self, data: Optional[AppInit] = None) -> App:
-        result = await self.post("/api/v2/apps", data or {})
-        return cast(App, result)
-
-    async def _apps_get(self, id_or_slug: str) -> App | None:
-        result = await self.get_or_none(f"/api/v2/apps/{id_or_slug}")
-        if result is None:
-            return None
-        return cast(App, result)
-
-    async def _apps_update(self, app: str, update: AppUpdate) -> App:
-        result = await self.patch(f"/api/v2/apps/{app}", update)
-        return cast(App, result)
-
-    async def _apps_delete(self, app: str) -> None:
-        await self.delete(f"/api/v2/apps/{app}")
-
-    async def _apps_list(
-        self, options: Optional[AppListOptions] = None
-    ) -> AsyncPaginatedList[App, AppListOptions]:
-        apps: AsyncPaginatedList[App, AppListOptions] = await self.get_paginated(
-            path="/api/v2/apps", cursor=None, params=options
-        )
-        return apps
-
-    async def _revisions_get(self, app: str, id_or_slug: str) -> Revision | None:
-        result = await self.get_or_none(f"/api/v2/apps/{app}/revisions/{id_or_slug}")
-        if result is None:
-            return None
-        return cast(Revision, result)
-
-    async def _revisions_list(
-        self, app: str, options: Optional[RevisionListOptions] = None
-    ) -> AsyncPaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
-        revisions: AsyncPaginatedList[
-            RevisionWithoutTimelines, RevisionListOptions
-        ] = await self.get_paginated(
-            path=f"/api/v2/apps/{app}/revisions", cursor=None, params=options
-        )
-
-        return revisions
-
-    async def _snapshots_get(self, id_or_slug: str) -> Snapshot | None:
-        result = await self.get_or_none(f"/api/v2/snapshots/{id_or_slug}")
-        if result is None:
-            return None
-        return cast(Snapshot, result)
-
-    async def _snapshots_list(
-        self, options: Optional[SnapshotListOptions] = None
-    ) -> AsyncPaginatedList[Snapshot, SnapshotListOptions]:
-        snapshots: AsyncPaginatedList[
-            Snapshot, SnapshotListOptions
-        ] = await self.get_paginated("/api/v2/snapshots", cursor=None, params=options)
-
-        return snapshots
-
-    async def _snapshots_delete(self, id_or_slug: str) -> None:
-        await self.delete(f"/api/v2/snapshots/{id_or_slug}")
-
-    async def _timelines_list(
-        self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> AsyncPaginatedList[Timeline, TimelineListOptions]:
-        timelines: AsyncPaginatedList[
-            Timeline, TimelineListOptions
-        ] = await self.get_paginated(
-            path=f"/api/v2/apps/{app}/timelines", cursor=None, params=options
-        )
-
-        return timelines
-
-    async def _volumes_create(self, data: VolumeInit) -> Volume:
-        params = {
-            "slug": data["slug"],
-            "capacity": data["capacity"],
-            "region": data["region"],
-        }
-        if data.get("from_snapshot") is not None:
-            params["from"] = data["from_snapshot"]
-
-        result = await self.post("/api/v2/volumes", params)
-        return cast(Volume, result)
-
-    async def _volumes_get(self, id_or_slug: str) -> Volume | None:
-        result = await self.get_or_none(f"/api/v2/volumes/{id_or_slug}")
-        if result is None:
-            return None
-        return cast(Volume, result)
-
-    async def _volumes_delete(self, id_or_slug: str) -> None:
-        await self.delete(f"/api/v2/volumes/{id_or_slug}")
-
-    async def _volumes_list(
-        self, options: Optional[VolumeListOptions] = None
-    ) -> AsyncPaginatedList[Volume, VolumeListOptions]:
-        volumes: AsyncPaginatedList[
-            Volume, VolumeListOptions
-        ] = await self.get_paginated(
-            path="/api/v2/volumes", cursor=None, params=options
-        )
-        return volumes
-
-    async def _volumes_snapshot(self, id_or_slug: str, init: SnapshotInit) -> Snapshot:
-        result = await self.post(f"/api/v2/volumes/{id_or_slug}/snapshot", init)
-        return cast(Snapshot, result)
-
-    # FIXME test
+    # Sandbox-related methods (used by sandbox.py)
     async def _sandboxes_list(
         self, options: Optional[SandboxListOptions] = None
     ) -> AsyncPaginatedList[SandboxMeta, SandboxListOptions]:
@@ -384,15 +265,6 @@ class ConsoleClient:
         self._async = AsyncConsoleClient(options)
         self._bridge = bridge
 
-    def get_paginated(
-        self, path: str, cursor: Optional[str], params: Optional[O] = None
-    ) -> PaginatedList[T, O]:
-        async_paginated = self._bridge.run(
-            self._async.get_paginated(path, cursor, params)
-        )
-
-        return PaginatedList(self._bridge, async_paginated)
-
     def close(self):
         self._bridge.run(self._async.close())
 
@@ -402,79 +274,7 @@ class ConsoleClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
 
-    # Proxy methods
-    def _apps_get(self, id_or_slug: str) -> App | None:
-        return self._bridge.run(self._async._apps_get(id_or_slug))
-
-    def _apps_list(
-        self, options: Optional[AppListOptions] = None
-    ) -> PaginatedList[App, AppListOptions]:
-        paginated: AsyncPaginatedList[App, AppListOptions] = self._bridge.run(
-            self._async._apps_list(options)
-        )
-        return PaginatedList(self._bridge, paginated)
-
-    def _apps_create(self, options: Optional[AppInit] = None) -> App:
-        return self._bridge.run(self._async._apps_create(options))
-
-    def _apps_update(self, app: str, update: AppUpdate) -> App:
-        return self._bridge.run(self._async._apps_update(app, update))
-
-    def _apps_delete(self, app: str) -> None:
-        self._bridge.run(self._async._apps_delete(app))
-
-    def _revisions_get(self, app: str, id_or_slug: str) -> Revision | None:
-        return self._bridge.run(self._async._revisions_get(app, id_or_slug))
-
-    def _revisions_list(
-        self, app: str, options: Optional[RevisionListOptions] = None
-    ) -> PaginatedList[RevisionWithoutTimelines, RevisionListOptions]:
-        paginated: AsyncPaginatedList[RevisionWithoutTimelines, RevisionListOptions] = (
-            self._bridge.run(self._async._revisions_list(app, options))
-        )
-        return PaginatedList(self._bridge, paginated)
-
-    def _snapshots_get(self, id_or_slug: str) -> Snapshot | None:
-        return self._bridge.run(self._async._snapshots_get(id_or_slug))
-
-    def _snapshots_list(
-        self, options: Optional[SnapshotListOptions] = None
-    ) -> PaginatedList[Snapshot, SnapshotListOptions]:
-        result = self._bridge.run(self._async._snapshots_list(options))
-
-        return PaginatedList(self._bridge, result)
-
-    def _snapshots_delete(self, id_or_slug: str) -> None:
-        self._bridge.run(self._async._snapshots_delete(id_or_slug))
-
-    def _timelines_list(
-        self, app: str, options: Optional[TimelineListOptions] = None
-    ) -> PaginatedList[Timeline, TimelineListOptions]:
-        paginated: AsyncPaginatedList[Timeline, TimelineListOptions] = self._bridge.run(
-            self._async._timelines_list(app, options)
-        )
-        return PaginatedList(self._bridge, paginated)
-
-    def _volumes_create(self, data: VolumeInit) -> Volume:
-        return self._bridge.run(self._async._volumes_create(data))
-
-    def _volumes_get(self, id_or_slug: str) -> Volume | None:
-        return self._bridge.run(self._async._volumes_get(id_or_slug))
-
-    def _volumes_delete(self, id_or_slug: str) -> None:
-        self._bridge.run(self._async._volumes_delete(id_or_slug))
-
-    def _volumes_list(
-        self, options: Optional[VolumeListOptions] = None
-    ) -> PaginatedList[Volume, VolumeListOptions]:
-        paginated: AsyncPaginatedList[Volume, VolumeListOptions] = self._bridge.run(
-            self._async._volumes_list(options)
-        )
-        return PaginatedList(self._bridge, paginated)
-
-    def _volumes_snapshot(self, id_or_slug: str, init: SnapshotInit) -> Snapshot:
-        return self._bridge.run(self._async._volumes_snapshot(id_or_slug, init))
-
+    # Sandbox-related methods (used by sandbox.py)
     def _sandboxes_list(
         self, options: Optional[SandboxListOptions] = None
     ) -> PaginatedList[SandboxMeta, SandboxListOptions]:

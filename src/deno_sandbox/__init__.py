@@ -1,16 +1,10 @@
 from typing import Optional
-from .api_generated import (
-    Apps,
-    AsyncApps,
-    AsyncRevisions,
-    AsyncSnapshots,
-    AsyncTimelines,
-    AsyncVolumes,
-    Revisions,
-    Snapshots,
-    Timelines,
-    Volumes,
-)
+
+from .apps import Apps, AsyncApps
+from .revisions import Revisions, AsyncRevisions
+from .snapshots import Snapshots, AsyncSnapshots
+from .timelines import Timelines, AsyncTimelines
+from .volumes import Volumes, AsyncVolumes
 from .bridge import AsyncBridge
 from .sandbox import (
     AsyncSandboxApi,
