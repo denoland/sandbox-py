@@ -87,50 +87,8 @@ class AppConfig(TypedDict):
     secrets: NotRequired[dict[str, SecretConfig] | None]
 
 
-class SandboxApi:
-    def __init__(self, client: ConsoleClient, bridge: AsyncBridge):
-        self._bridge = bridge
-        self._client = client
-        self._async_sandbox = AsyncSandboxApi(self._client._async)
-
-    @contextmanager
-    def create(self, options: Optional[SandboxCreateOptions] = None):
-        async_cm = self._async_sandbox.create(options)
-        async_handle = self._bridge.run(async_cm.__aenter__())
-
-        rpc = RpcClient(async_handle._rpc, self._bridge)
-
-        try:
-            yield Sandbox(self._client, rpc, async_handle)
-        except Exception:
-            import sys
-
-            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
-            raise
-        finally:
-            self._bridge.run(async_cm.__aexit__(None, None, None))
-
-    @contextmanager
-    def connect(self, options: SandboxConnectOptions):
-        async_cm = self._async_sandbox.connect(options)
-        async_handle = self._bridge.run(async_cm.__aenter__())
-
-        rpc = RpcClient(async_handle._rpc, self._bridge)
-
-        try:
-            yield Sandbox(self._client, rpc, async_handle)
-        except Exception:
-            import sys
-
-            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
-            raise
-        finally:
-            self._bridge.run(async_cm.__aexit__(None, None, None))
-
-    def list(
-        self, options: SandboxListOptions
-    ) -> PaginatedList[SandboxMeta, SandboxListOptions]:
-        return self._client._sandboxes_list(options)
+class ExposeHTTPResult(TypedDict):
+    domain: str
 
 
 class AsyncSandboxApi:
@@ -228,7 +186,56 @@ class AsyncSandboxApi:
     async def list(
         self, options: Optional[SandboxListOptions] = None
     ) -> AsyncPaginatedList[SandboxMeta, SandboxListOptions]:
-        return await self._client._sandboxes_list(options)
+        return await self._client.get_paginated(
+            path="/api/v3/sandboxes", cursor=None, params=options
+        )
+
+
+class SandboxApi:
+    def __init__(self, client: ConsoleClient, bridge: AsyncBridge):
+        self._bridge = bridge
+        self._client = client
+        self._async = AsyncSandboxApi(self._client._async)
+
+    @contextmanager
+    def create(self, options: Optional[SandboxCreateOptions] = None):
+        async_cm = self._async.create(options)
+        async_handle = self._bridge.run(async_cm.__aenter__())
+
+        rpc = RpcClient(async_handle._rpc, self._bridge)
+
+        try:
+            yield Sandbox(self._client, rpc, async_handle)
+        except Exception:
+            import sys
+
+            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
+            raise
+        finally:
+            self._bridge.run(async_cm.__aexit__(None, None, None))
+
+    @contextmanager
+    def connect(self, options: SandboxConnectOptions):
+        async_cm = self._async.connect(options)
+        async_handle = self._bridge.run(async_cm.__aenter__())
+
+        rpc = RpcClient(async_handle._rpc, self._bridge)
+
+        try:
+            yield Sandbox(self._client, rpc, async_handle)
+        except Exception:
+            import sys
+
+            self._bridge.run(async_cm.__aexit__(*sys.exc_info()))
+            raise
+        finally:
+            self._bridge.run(async_cm.__aexit__(None, None, None))
+
+    def list(
+        self, options: Optional[SandboxListOptions] = None
+    ) -> PaginatedList[SandboxMeta, SandboxListOptions]:
+        paginated = self._bridge.run(self._async.list(options))
+        return PaginatedList(self._bridge, paginated)
 
 
 class VsCodeOptions(TypedDict):
@@ -460,7 +467,7 @@ class AsyncSandbox:
         await self._rpc.close()
 
     async def kill(self) -> None:
-        await self._client._kill_sandbox(self.id)
+        await self._client.delete(f"/api/v3/sandboxes/{self.id}")
 
     async def extend_timeout(self, additional_s: int) -> datetime:
         """Request to extend the timeout of the sandbox by the specified duration.
@@ -474,7 +481,11 @@ class AsyncSandbox:
         future_time = now + timedelta(seconds=additional_s)
         stop_at_ms = int(future_time.timestamp() * 1000)
 
-        return await self._client._extend_timeout(self.id, stop_at_ms)
+        url = self._client._options["sandbox_url"].join(f"/api/v3/sandbox/{self.id}")
+        result = await self._client._request("PATCH", url, {"stop_at_ms": stop_at_ms})
+        data = result.json()
+
+        return datetime.fromtimestamp(data["stop_at_ms"] / 1000, tz=timezone.utc)
 
     async def expose_http(
         self, port: Optional[int] = None, pid: Optional[int] = None
@@ -492,13 +503,18 @@ class AsyncSandbox:
         if port is not None and pid is not None:
             raise ValueError("Only one of port or pid can be specified")
 
-        params = {}
+        params: dict[str, Any] = {}
         if port is not None:
             params["port"] = port
         if pid is not None:
             params["pid"] = pid
 
-        domain = await self._client._expose_http(self.id, params)
+        url = self._client._options["sandbox_url"].join(
+            f"/api/v3/sandbox/{self.id}/expose/http"
+        )
+        result = await self._client._request("POST", url, params)
+        data = cast(ExposeHTTPResult, result.json())
+        domain = data["domain"]
 
         params["domain"] = domain
         await self._rpc.call("exposeHttp", params)
@@ -513,7 +529,12 @@ class AsyncSandbox:
         connect to the isolate's shell without further authentication.
         """
 
-        return await self._client._expose_ssh(self.id)
+        url = self._client._options["sandbox_url"].join(
+            f"/api/v3/sandbox/{self.id}/expose/ssh"
+        )
+        response = await self._client._request("POST", url, {})
+
+        return cast(ExposeSSHResult, response.json())
 
     async def __aenter__(self):
         return self
