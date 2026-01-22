@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+from typing_extensions import Optional
+
+from .api_types_generated import (
+    App,
+    AppListOptions,
+    AppInit,
+    AppUpdate,
+)
+from .utils import convert_to_snake_case
+
+if TYPE_CHECKING:
+    from .console import (
+        AsyncConsoleClient,
+        AsyncPaginatedList,
+        ConsoleClient,
+        PaginatedList,
+    )
+
+
+class Apps:
+    def __init__(self, client: ConsoleClient):
+        self._client = client
+
+    def get(self, id_or_slug: str) -> App:
+        """Get an app by its ID or slug."""
+
+        result = self._client._apps_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    def list(
+        self, options: Optional[AppListOptions] = None
+    ) -> PaginatedList[App, AppListOptions]:
+        """List apps of an org."""
+
+        result = self._client._apps_list(options)
+
+        return result
+
+    def create(self, options: Optional[AppInit] = None) -> App:
+        """Create a new app."""
+
+        result = self._client._apps_create(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    def update(self, app: str, update: AppUpdate) -> App:
+        """Update an existing app."""
+
+        result = self._client._apps_update(app, update)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    def delete(self, app: str) -> None:
+        """Delete an app by its ID or slug."""
+
+        self._client._apps_delete(app)
+
+
+class AsyncApps:
+    def __init__(self, client: AsyncConsoleClient):
+        self._client = client
+
+    async def get(self, id_or_slug: str) -> App:
+        """Get an app by its ID or slug."""
+
+        result = await self._client._apps_get(id_or_slug)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    async def list(
+        self, options: Optional[AppListOptions] = None
+    ) -> AsyncPaginatedList[App, AppListOptions]:
+        """List apps of an org."""
+
+        result = await self._client._apps_list(options)
+
+        return result
+
+    async def create(self, options: Optional[AppInit] = None) -> App:
+        """Create a new app."""
+
+        result = await self._client._apps_create(options)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    async def update(self, app: str, update: AppUpdate) -> App:
+        """Update an existing app."""
+
+        result = await self._client._apps_update(app, update)
+
+        raw_result = convert_to_snake_case(result)
+        return cast(App, raw_result)
+
+    async def delete(self, app: str) -> None:
+        """Delete an app by its ID or slug."""
+
+        await self._client._apps_delete(app)

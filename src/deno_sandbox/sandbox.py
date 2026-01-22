@@ -4,10 +4,8 @@ import base64
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 import json
-import os
 from typing import (
     Any,
-    AsyncIterable,
     AsyncIterator,
     BinaryIO,
     Iterable,
@@ -18,26 +16,28 @@ from typing import (
 )
 from typing_extensions import Literal, NotRequired, TypeAlias
 
-from .stream import Streamable, complete_stream, start_stream, stream_data
+from .stream import Streamable, complete_stream, start_stream
 
-from .api_generated import (
-    AsyncSandboxEnv,
-    AsyncSandboxFs as AsyncSandboxFsGenerated,
-    SandboxEnv,
-    SandboxFs as SandboxFsGenerated,
+from .env import AsyncSandboxEnv, SandboxEnv
+from .fs import AsyncSandboxFs, SandboxFs
+from .process import (
+    AsyncChildProcess,
+    AsyncDenoProcess,
+    AsyncDenoRepl,
+    ChildProcess,
+    DenoProcess,
+    DenoRepl,
+    ProcessSpawnResult,
+    RemoteProcessOptions,
 )
 from .api_types_generated import (
     DenoReplOptions,
     DenoRunOptions,
-    FsFileHandle,
-    FsOpenOptions,
-    ReadFileOptions,
     SandboxListOptions,
     SandboxCreateOptions,
     SandboxConnectOptions,
     SandboxMeta,
     SpawnOptions,
-    WriteFileOptions,
 )
 from .bridge import AsyncBridge
 from .console import (
@@ -47,29 +47,13 @@ from .console import (
     ExposeSSHResult,
     PaginatedList,
 )
-from .rpc import AsyncRpcClient, RpcClient
+from .rpc import AsyncFetchResponse, AsyncRpcClient, FetchResponse, RpcClient
 from .transport import (
     WebSocketTransport,
 )
 from .utils import (
-    convert_to_camel_case,
-    convert_to_snake_case,
     to_camel_case,
     to_snake_case,
-)
-from .wrappers import (
-    AsyncChildProcess,
-    AsyncDenoProcess,
-    AsyncDenoRepl,
-    AsyncFetchResponse,
-    AsyncFsFile,
-    ChildProcess,
-    DenoProcess,
-    DenoRepl,
-    FetchResponse,
-    FsFile,
-    ProcessSpawnResult,
-    RemoteProcessOptions,
 )
 
 
@@ -254,7 +238,7 @@ class VsCodeOptions(TypedDict):
     extensions: NotRequired[list[str] | None]
     """
     The extensions to be loaded in the VSCode instance.
-   
+
     The accepted values are:
     - an extension id
     - Coder extension marketplace
@@ -618,192 +602,6 @@ class Sandbox:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._client._bridge.run(self._async.__aexit__(exc_type, exc_val, exc_tb))
-
-
-class AsyncSandboxFs(AsyncSandboxFsGenerated):
-    """Filesystem operations inside the sandbox."""
-
-    async def read_file(
-        self, path: str, options: Optional[ReadFileOptions] = None
-    ) -> bytes:
-        """Reads the entire contents of a file as bytes."""
-
-        params: dict[str, Any] = {"path": path}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = await self._rpc.call("readFile", params)
-
-        # Server returns base64-encoded data
-        return base64.b64decode(result)
-
-    async def create(self, path: str) -> AsyncFsFile:
-        """Create a new, empty file at the specified path."""
-
-        params = {"path": path}
-        result = await self._rpc.call("create", params)
-
-        raw_result = convert_to_snake_case(result)
-        handle = cast(FsFileHandle, raw_result)
-
-        return AsyncFsFile(self._rpc, handle["file_handle_id"])
-
-    async def open(
-        self, path: str, options: Optional[FsOpenOptions] = None
-    ) -> AsyncFsFile:
-        """Open a file and return a file descriptor."""
-
-        params = {"path": path}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = await self._rpc.call("open", params)
-
-        raw_result = convert_to_snake_case(result)
-        handle = cast(FsFileHandle, raw_result)
-
-        return AsyncFsFile(self._rpc, handle["file_handle_id"])
-
-    async def write_file(
-        self,
-        path: str,
-        data: Union[bytes, AsyncIterable[bytes], Iterable[bytes], BinaryIO],
-        options: Optional[WriteFileOptions] = None,
-    ) -> None:
-        """Write bytes to file. Accepts bytes, async/sync iterables, or file objects."""
-
-        if isinstance(data, bytes):
-            # Stream bytes as a single chunk
-            content_stream_id = await stream_data(self._rpc, iter([data]))
-        else:
-            # Stream data from iterable/file object
-            content_stream_id = await stream_data(self._rpc, data)
-
-        params: dict[str, Any] = {"path": path, "contentStreamId": content_stream_id}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-        await self._rpc.call("writeFile", params)
-
-    async def upload(self, local_path: str, sandbox_path: str) -> None:
-        """Upload a file, directory, or symlink from local filesystem to the sandbox.
-
-        Recursively uploads directories and their contents.
-        Preserves symlinks by creating corresponding symlinks in the sandbox.
-        """
-        await self._upload_item(local_path, sandbox_path)
-
-    async def _upload_item(self, local_path: str, sandbox_path: str) -> None:
-        """Internal method to upload a single item (file, directory, or symlink)."""
-        if os.path.islink(local_path):
-            # It's a symlink - read the target and create a symlink in sandbox
-            target = os.readlink(local_path)
-            await self.symlink(target, sandbox_path)
-        elif os.path.isdir(local_path):
-            # It's a directory - create it and recursively upload contents
-            await self.mkdir(sandbox_path, {"recursive": True})
-            for entry in os.listdir(local_path):
-                entry_local_path = os.path.join(local_path, entry)
-                entry_sandbox_path = f"{sandbox_path}/{entry}"
-                await self._upload_item(entry_local_path, entry_sandbox_path)
-        elif os.path.isfile(local_path):
-            # It's a file - stream it to write_file
-            with open(local_path, "rb") as f:
-                await self.write_file(sandbox_path, f)
-        else:
-            raise FileNotFoundError(f"Local path does not exist: {local_path}")
-
-
-class SandboxFs(SandboxFsGenerated):
-    """Filesystem operations inside the sandbox."""
-
-    def read_file(self, path: str, options: Optional[ReadFileOptions] = None) -> bytes:
-        """Reads the entire contents of a file as bytes."""
-
-        params: dict[str, Any] = {"path": path}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = self._rpc.call("readFile", params)
-
-        # Server returns base64-encoded data
-        return base64.b64decode(result)
-
-    def create(self, path: str) -> FsFile:
-        """Create a new, empty file at the specified path."""
-
-        params = {"path": path}
-        result = self._rpc.call("create", params)
-
-        raw_result = convert_to_snake_case(result)
-        handle = cast(FsFileHandle, raw_result)
-
-        return FsFile(self._rpc, handle["file_handle_id"])
-
-    def open(self, path: str, options: Optional[FsOpenOptions] = None) -> FsFile:
-        """Open a file and return a file descriptor."""
-
-        params = {"path": path}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-
-        result = self._rpc.call("open", params)
-
-        raw_result = convert_to_snake_case(result)
-        handle = cast(FsFileHandle, raw_result)
-
-        return FsFile(self._rpc, handle["file_handle_id"])
-
-    def write_file(
-        self,
-        path: str,
-        data: Union[bytes, Iterable[bytes], BinaryIO],
-        options: Optional[WriteFileOptions] = None,
-    ) -> None:
-        """Write bytes to file. Accepts bytes, sync iterables, or file objects."""
-
-        if isinstance(data, bytes):
-            # Stream bytes as a single chunk
-            content_stream_id = self._client._bridge.run(
-                stream_data(self._rpc._async_client, iter([data]))
-            )
-        else:
-            # Stream data from iterable/file object
-            content_stream_id = self._client._bridge.run(
-                stream_data(self._rpc._async_client, data)
-            )
-
-        params: dict[str, Any] = {"path": path, "contentStreamId": content_stream_id}
-        if options is not None:
-            params["options"] = convert_to_camel_case(options)
-        self._rpc.call("writeFile", params)
-
-    def upload(self, local_path: str, sandbox_path: str) -> None:
-        """Upload a file, directory, or symlink from local filesystem to the sandbox.
-
-        Recursively uploads directories and their contents.
-        Preserves symlinks by creating corresponding symlinks in the sandbox.
-        """
-        self._upload_item(local_path, sandbox_path)
-
-    def _upload_item(self, local_path: str, sandbox_path: str) -> None:
-        """Internal method to upload a single item (file, directory, or symlink)."""
-        if os.path.islink(local_path):
-            # It's a symlink - read the target and create a symlink in sandbox
-            target = os.readlink(local_path)
-            self.symlink(target, sandbox_path)
-        elif os.path.isdir(local_path):
-            # It's a directory - create it and recursively upload contents
-            self.mkdir(sandbox_path, {"recursive": True})
-            for entry in os.listdir(local_path):
-                entry_local_path = os.path.join(local_path, entry)
-                entry_sandbox_path = f"{sandbox_path}/{entry}"
-                self._upload_item(entry_local_path, entry_sandbox_path)
-        elif os.path.isfile(local_path):
-            # It's a file - stream it to write_file
-            with open(local_path, "rb") as f:
-                self.write_file(sandbox_path, f)
-        else:
-            raise FileNotFoundError(f"Local path does not exist: {local_path}")
 
 
 class AsyncVsCode:
