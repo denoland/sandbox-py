@@ -46,7 +46,7 @@ from .console import (
     ExposeSSHResult,
     PaginatedList,
 )
-from .rpc import AsyncFetchResponse, AsyncRpcClient, FetchResponse, RpcClient
+from .rpc import AsyncFetchResponse, AsyncRpcClient, FetchResponse
 from .transport import (
     WebSocketTransport,
 )
@@ -201,10 +201,8 @@ class SandboxApi:
         async_cm = self._async.create(options)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
-        rpc = RpcClient(async_handle._rpc, self._bridge)
-
         try:
-            yield Sandbox(self._client, self._bridge, rpc, async_handle)
+            yield Sandbox(self._client, self._bridge, async_handle._rpc, async_handle)
         except Exception:
             import sys
 
@@ -218,10 +216,8 @@ class SandboxApi:
         async_cm = self._async.connect(options)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
-        rpc = RpcClient(async_handle._rpc, self._bridge)
-
         try:
-            yield Sandbox(self._client, self._bridge, rpc, async_handle)
+            yield Sandbox(self._client, self._bridge, async_handle._rpc, async_handle)
         except Exception:
             import sys
 
@@ -352,14 +348,14 @@ class AsyncSandboxDeno:
 class SandboxDeno:
     def __init__(
         self,
+        rpc: AsyncRpcClient,
         bridge: AsyncBridge,
-        rpc: RpcClient,
         processes: list[AsyncChildProcess],
     ):
-        self._bridge = bridge
         self._rpc = rpc
+        self._bridge = bridge
 
-        self._async = AsyncSandboxDeno(rpc._async_client, processes)
+        self._async = AsyncSandboxDeno(rpc, processes)
 
     def run(
         self,
@@ -370,14 +366,14 @@ class SandboxDeno:
         Create a new Deno process from the specified entrypoint file or code. The runtime will execute the given code to completion, and then exit.
         """
         async_deno = self._bridge.run(self._async.run(options, stdin))
-        return DenoProcess(self._rpc, async_deno)
+        return DenoProcess(self._rpc, self._bridge, async_deno)
 
     def eval(self, code: str) -> Any:
         return self._bridge.run(self._async.eval(code))
 
     def repl(self, options: Optional[DenoReplOptions] = None) -> DenoRepl:
         async_repl = self._bridge.run(self._async.repl(options))
-        return DenoRepl(self._rpc, async_repl)
+        return DenoRepl(self._rpc, self._bridge, async_repl)
 
 
 class AsyncSandbox:
@@ -543,7 +539,7 @@ class Sandbox:
         self,
         client: AsyncConsoleClient,
         bridge: AsyncBridge,
-        rpc: RpcClient,
+        rpc: AsyncRpcClient,
         async_sandbox: AsyncSandbox,
     ):
         self._client = client
@@ -554,13 +550,13 @@ class Sandbox:
         self.url: str | None = None
         self.ssh: None = None
         self.id = async_sandbox.id
-        self.fs = SandboxFs(bridge, rpc)
-        self.deno = SandboxDeno(bridge, rpc, self._async._processes)
-        self.env = SandboxEnv(rpc)
+        self.fs = SandboxFs(rpc, bridge)
+        self.deno = SandboxDeno(rpc, bridge, self._async._processes)
+        self.env = SandboxEnv(rpc, bridge)
 
     @property
     def closed(self) -> bool:
-        return self._rpc._async_client._transport.closed
+        return self._rpc._transport.closed
 
     def spawn(
         self,
@@ -569,7 +565,7 @@ class Sandbox:
         stdin: Optional[Union[Iterable[bytes], BinaryIO]] = None,
     ) -> ChildProcess:
         async_child = self._bridge.run(self._async.spawn(command, options, stdin))
-        return ChildProcess(self._rpc, async_child)
+        return ChildProcess(self._rpc, self._bridge, async_child)
 
     def fetch(
         self,
@@ -578,7 +574,10 @@ class Sandbox:
         headers: Optional[dict[str, str]] = None,
         redirect: Optional[Literal["follow", "manual"]] = None,
     ) -> FetchResponse:
-        return self._rpc.fetch(url, method, headers, redirect, None)
+        async_response = self._bridge.run(
+            self._rpc.fetch(url, method, headers, redirect, None)
+        )
+        return FetchResponse(async_response)
 
     def close(self) -> None:
         self._bridge.run(self._async.close())
@@ -626,7 +625,7 @@ class Sandbox:
 class AsyncVsCode:
     """Experimental! A VSCode instance running inside the sandbox."""
 
-    def __init__(self, rpc: RpcClient, url: str):
+    def __init__(self, rpc: AsyncRpcClient, url: str):
         self._rpc = rpc
         self.url = url
 
@@ -658,8 +657,9 @@ class AsyncVsCode:
 class VsCode:
     """Experimental! A VSCode instance running inside the sandbox."""
 
-    def __init__(self, rpc: RpcClient, async_vscode: AsyncVsCode):
+    def __init__(self, rpc: AsyncRpcClient, bridge: AsyncBridge, async_vscode: AsyncVsCode):
         self._rpc = rpc
+        self._bridge = bridge
         self._async = async_vscode
 
     @property
@@ -677,7 +677,7 @@ class VsCode:
         pass
 
     async def kill(self) -> None:
-        self._rpc._bridge.run(self._async.kill())
+        self._bridge.run(self._async.kill())
 
     async def __aenter__(self):
         return self

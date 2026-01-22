@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .rpc import AsyncRpcClient, RpcClient
+    from .rpc import AsyncRpcClient
+    from .bridge import AsyncBridge
 
 
 class AsyncSandboxEnv:
@@ -40,33 +41,23 @@ class AsyncSandboxEnv:
 
 
 class SandboxEnv:
-    def __init__(self, rpc: RpcClient):
+    def __init__(self, rpc: AsyncRpcClient, bridge: AsyncBridge):
         self._rpc = rpc
+        self._bridge = bridge
+        self._async = AsyncSandboxEnv(rpc)
 
     def get(self, key: str) -> str:
         """Get the value of an environment variable."""
-
-        params = {"key": key}
-        result = self._rpc.call("envGet", params)
-
-        return result
+        return self._bridge.run(self._async.get(key))
 
     def set(self, key: str, value: str) -> None:
         """Set the value of an environment variable."""
-
-        params = {"key": key, "value": value}
-        self._rpc.call("envSet", params)
+        self._bridge.run(self._async.set(key, value))
 
     def to_object(self) -> dict[str, str]:
         """Get all environment variables."""
-
-        params = {}
-        result = self._rpc.call("envToObject", params)
-
-        return result
+        return self._bridge.run(self._async.to_object())
 
     def delete(self, key: str) -> None:
         """Delete an environment variable."""
-
-        params = {"key": key}
-        self._rpc.call("envDelete", params)
+        self._bridge.run(self._async.delete(key))

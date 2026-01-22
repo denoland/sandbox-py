@@ -7,7 +7,6 @@ from typing import Any, Dict, Literal, Mapping, Optional, TypedDict, cast
 from typing_extensions import NotRequired
 from websockets import ConnectionClosed
 
-from .bridge import AsyncBridge
 from .errors import (
     HTTPStatusError,
     ProcessAlreadyExited,
@@ -198,32 +197,6 @@ class AsyncRpcClient:
         return fetch_response
 
 
-class RpcClient:
-    def __init__(self, async_client: AsyncRpcClient, bridge: AsyncBridge):
-        self._async_client = async_client
-        self._bridge = bridge
-
-    def call(self, method: str, params: Dict[str, Any]) -> Any:
-        return self._bridge.run(self._async_client.call(method, params))
-
-    def fetch(
-        self,
-        url: str,
-        method: Optional[str] = "GET",
-        headers: Optional[dict[str, str]] = None,
-        redirect: Optional[Literal["follow", "manual"]] = None,
-        pid: Optional[int] = None,
-    ) -> FetchResponse:
-        response: AsyncFetchResponse = self._bridge.run(
-            self._async_client.fetch(url, method, headers, redirect, pid)
-        )
-
-        return FetchResponse(self, response)
-
-    def close(self):
-        self._bridge.run(self._async_client.close())
-
-
 class FetchParams(TypedDict):
     method: str
     url: str
@@ -306,8 +279,7 @@ class AsyncFetchResponse:
 
 
 class FetchResponse(AsyncFetchResponse):
-    def __init__(self, rpc: RpcClient, async_res: AsyncFetchResponse):
-        self._rpc = rpc
+    def __init__(self, async_res: AsyncFetchResponse):
         self._async = async_res
 
     def raise_for_status(self) -> HTTPStatusError | None:
