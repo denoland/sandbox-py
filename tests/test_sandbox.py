@@ -235,10 +235,8 @@ async def test_deno_deploy_async():
             # Deploy to the app
             build = await sandbox.deno.deploy(
                 app["slug"],
-                options={
-                    "build": {"entrypoint": "main.ts"},
-                    "production": False,
-                },
+                entrypoint="main.ts",
+                production=False,
             )
 
             # Verify build object
@@ -290,10 +288,8 @@ def test_deno_deploy_sync():
             # Deploy to the app
             build = sandbox.deno.deploy(
                 app["slug"],
-                options={
-                    "build": {"entrypoint": "main.ts"},
-                    "production": False,
-                },
+                entrypoint="main.ts",
+                production=False,
             )
 
             # Verify build object

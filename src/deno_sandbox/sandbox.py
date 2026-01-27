@@ -98,35 +98,6 @@ class ExposeHTTPResult(TypedDict):
     domain: str
 
 
-class DeployBuildOptions(TypedDict, total=False):
-    """Build configuration for deployment."""
-
-    mode: Literal["none"]
-    """The build mode to use. Currently only 'none' is supported. Defaults to 'none'."""
-
-    entrypoint: str
-    """The entrypoint file path relative to the path option. Defaults to 'main.ts'."""
-
-    args: builtins.list[str]
-    """Arguments to pass to the entrypoint script."""
-
-
-class DeployOptions(TypedDict, total=False):
-    """Options for deploying an app using deno.deploy()."""
-
-    path: str
-    """The path to the directory to deploy. If relative, it is relative to /app. Defaults to '.'."""
-
-    production: bool
-    """Whether to deploy in production mode. Defaults to True."""
-
-    preview: bool
-    """Whether to deploy a preview deployment. Defaults to False."""
-
-    build: DeployBuildOptions
-    """Build options to use."""
-
-
 class BuildLog(TypedDict):
     """A build log entry from app deployment."""
 
@@ -676,13 +647,24 @@ class AsyncSandboxDeno:
         return process
 
     async def deploy(
-        self, app: str, *, options: Optional[DeployOptions] = None
+        self,
+        app: str,
+        *,
+        entrypoint: Optional[str] = None,
+        args: Optional[builtins.list[str]] = None,
+        path: Optional[str] = None,
+        production: Optional[bool] = None,
+        preview: Optional[bool] = None,
     ) -> AsyncBuild:
         """Deploy the contents of the sandbox to the specified app in Deno Deploy platform.
 
         Args:
             app: The app ID or slug to deploy to.
-            options: Deployment configuration options.
+            entrypoint: The entrypoint file path relative to the path option. Defaults to 'main.ts'.
+            args: Arguments to pass to the entrypoint script.
+            path: The path to the directory to deploy. If relative, it is relative to /app. Defaults to '/app'.
+            production: Whether to deploy in production mode. Defaults to True.
+            preview: Whether to deploy a preview deployment. Defaults to False.
 
         Returns:
             An AsyncBuild object with the revision ID and methods to check status and logs.
@@ -697,9 +679,7 @@ class AsyncSandboxDeno:
                         "main.ts",
                         'Deno.serve(() => new Response("Hi from sandbox.deploy()"))',
                     )
-                    build = await sandbox.deno.deploy("my-deno-app", options={
-                        "build": {"entrypoint": "main.ts"}
-                    })
+                    build = await sandbox.deno.deploy("my-deno-app", entrypoint="main.ts")
                     print(f"Deployed revision ID: {build.id}")
                     revision = await build.done
                     print(f"Revision status: {revision['status']}")
@@ -713,27 +693,17 @@ class AsyncSandboxDeno:
 
         # Build request body
         body: dict[str, Any] = {
-            "entrypoint": (
-                options.get("build", {}).get("entrypoint", "main.ts")
-                if options
-                else "main.ts"
-            ),
+            "entrypoint": entrypoint if entrypoint is not None else "main.ts",
             "sandboxId": self._sandbox_id,
+            "path": path if path is not None else "/app",
         }
 
-        if options:
-            if "build" in options and "args" in options["build"]:
-                body["args"] = options["build"]["args"]
-            if "production" in options:
-                body["production"] = options["production"]
-            if "preview" in options:
-                body["preview"] = options["preview"]
-            if "path" in options:
-                body["path"] = options["path"]
-            else:
-                body["path"] = "/app"
-        else:
-            body["path"] = "/app"
+        if args is not None:
+            body["args"] = args
+        if production is not None:
+            body["production"] = production
+        if preview is not None:
+            body["preview"] = preview
 
         # Make the deploy request
         async with httpx.AsyncClient() as http_client:
@@ -861,12 +831,25 @@ class SandboxDeno:
         )
         return DenoRepl(self._rpc, self._bridge, async_repl)
 
-    def deploy(self, app: str, *, options: Optional[DeployOptions] = None) -> Build:
+    def deploy(
+        self,
+        app: str,
+        *,
+        entrypoint: Optional[str] = None,
+        args: Optional[builtins.list[str]] = None,
+        path: Optional[str] = None,
+        production: Optional[bool] = None,
+        preview: Optional[bool] = None,
+    ) -> Build:
         """Deploy the contents of the sandbox to the specified app in Deno Deploy platform.
 
         Args:
             app: The app ID or slug to deploy to.
-            options: Deployment configuration options.
+            entrypoint: The entrypoint file path relative to the path option. Defaults to 'main.ts'.
+            args: Arguments to pass to the entrypoint script.
+            path: The path to the directory to deploy. If relative, it is relative to /app. Defaults to '/app'.
+            production: Whether to deploy in production mode. Defaults to True.
+            preview: Whether to deploy a preview deployment. Defaults to False.
 
         Returns:
             A Build object with the revision ID and methods to check status and logs.
@@ -881,15 +864,22 @@ class SandboxDeno:
                     "main.ts",
                     'Deno.serve(() => new Response("Hi from sandbox.deploy()"))',
                 )
-                build = sandbox.deno.deploy("my-deno-app", options={
-                    "build": {"entrypoint": "main.ts"}
-                })
+                build = sandbox.deno.deploy("my-deno-app", entrypoint="main.ts")
                 print(f"Deployed revision ID: {build.id}")
                 revision = build.done
                 print(f"Revision status: {revision['status']}")
             ```
         """
-        async_build = self._bridge.run(self._async.deploy(app, options=options))
+        async_build = self._bridge.run(
+            self._async.deploy(
+                app,
+                entrypoint=entrypoint,
+                args=args,
+                path=path,
+                production=production,
+                preview=preview,
+            )
+        )
         return Build(async_build.id, app, self._client, self._bridge)
 
 
