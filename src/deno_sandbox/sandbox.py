@@ -16,9 +16,10 @@ from typing import (
     cast,
 )
 from typing_extensions import Literal, NotRequired, TypeAlias
+import httpx
 
 from .stream import Streamable, complete_stream, start_stream
-
+from .utils import convert_to_snake_case
 from .env import AsyncSandboxEnv, SandboxEnv
 from .fs import AsyncSandboxFs, SandboxFs
 from .process import (
@@ -43,6 +44,7 @@ from .rpc import AsyncFetchResponse, AsyncRpcClient, FetchResponse
 from .transport import (
     WebSocketTransport,
 )
+from .revisions import Revision
 
 
 Mode: TypeAlias = Literal["connect", "create"]
@@ -94,6 +96,48 @@ class AppConfig(TypedDict):
 
 class ExposeHTTPResult(TypedDict):
     domain: str
+
+
+class DeployBuildOptions(TypedDict, total=False):
+    """Build configuration for deployment."""
+
+    mode: Literal["none"]
+    """The build mode to use. Currently only 'none' is supported. Defaults to 'none'."""
+
+    entrypoint: str
+    """The entrypoint file path relative to the path option. Defaults to 'main.ts'."""
+
+    args: builtins.list[str]
+    """Arguments to pass to the entrypoint script."""
+
+
+class DeployOptions(TypedDict, total=False):
+    """Options for deploying an app using deno.deploy()."""
+
+    path: str
+    """The path to the directory to deploy. If relative, it is relative to /app. Defaults to '.'."""
+
+    production: bool
+    """Whether to deploy in production mode. Defaults to True."""
+
+    preview: bool
+    """Whether to deploy a preview deployment. Defaults to False."""
+
+    build: DeployBuildOptions
+    """Build options to use."""
+
+
+class BuildLog(TypedDict):
+    """A build log entry from app deployment."""
+
+    timestamp: str
+    """The timestamp of the build log."""
+
+    level: Literal["info", "error"]
+    """The level of the build log."""
+
+    message: str
+    """The message of the build log."""
 
 
 class AsyncSandboxApi:
@@ -352,14 +396,125 @@ class SandboxApi:
         return PaginatedList(self._bridge, paginated)
 
 
+async def _parse_sse_stream(stream: AsyncIterator[bytes]) -> AsyncIterator[str]:
+    """Parse Server-Sent Events from a byte stream."""
+    buffer = b""
+    async for chunk in stream:
+        buffer += chunk
+        while b"\n" in buffer:
+            line, buffer = buffer.split(b"\n", 1)
+            line = line.rstrip(b"\r")
+            if line.startswith(b"data: "):
+                data = line[6:].decode("utf-8")
+                yield data
+
+
+class AsyncBuild:
+    """The result of a deno.deploy() operation."""
+
+    def __init__(
+        self,
+        revision_id: str,
+        app: str,
+        client: AsyncConsoleClient,
+    ):
+        self.id = revision_id
+        """The ID of the build."""
+        self._app = app
+        self._client = client
+
+    async def wait(self) -> Revision:
+        """A coroutine that resolves when the build is complete, returning the revision."""
+
+        url = self._client._options["console_url"].join(
+            f"/api/v2/apps/{self._app}/revisions/{self.id}/status"
+        )
+        headers = {
+            "Authorization": f"Bearer {self._client._options['token']}",
+        }
+
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.get(str(url), headers=headers)
+            response.raise_for_status()
+            revision_data = response.json()
+
+            # Fetch timelines
+            timelines_url = self._client._options["console_url"].join(
+                f"/api/v2/apps/{self._app}/revisions/{self.id}/timelines"
+            )
+            timelines_response = await http_client.get(
+                str(timelines_url), headers=headers
+            )
+            timelines_response.raise_for_status()
+            timelines_data = timelines_response.json()
+
+            result = convert_to_snake_case(revision_data)
+            result["timelines"] = convert_to_snake_case(timelines_data)
+            return cast(Revision, result)
+
+    async def logs(self) -> AsyncIterator[BuildLog]:
+        """An async iterator of build logs."""
+        url = self._client._options["console_url"].join(
+            f"/api/v2/apps/{self._app}/revisions/{self.id}/logs"
+        )
+        headers = {
+            "Authorization": f"Bearer {self._client._options['token']}",
+        }
+
+        async with httpx.AsyncClient() as http_client:
+            async with http_client.stream("GET", str(url), headers=headers) as response:
+                response.raise_for_status()
+                async for data in _parse_sse_stream(response.aiter_bytes()):
+                    try:
+                        yield cast(BuildLog, json.loads(data))
+                    except json.JSONDecodeError:
+                        # Skip malformed log entries
+                        continue
+
+
+class Build:
+    """The result of a deno.deploy() operation (sync version)."""
+
+    def __init__(
+        self,
+        revision_id: str,
+        app: str,
+        client: AsyncConsoleClient,
+        bridge: AsyncBridge,
+    ):
+        self.id = revision_id
+        """The ID of the build."""
+        self._async_build = AsyncBuild(revision_id, app, client)
+        self._bridge = bridge
+
+    def wait(self) -> Revision:
+        """Returns the revision when the build is complete."""
+        return self._bridge.run(self._async_build.wait())
+
+    def logs(self) -> builtins.list[BuildLog]:
+        """Returns a list of build logs."""
+
+        async def _collect_logs():
+            logs = []
+            async for log in self._async_build.logs():
+                logs.append(log)
+            return logs
+
+        return self._bridge.run(_collect_logs())
+
+
 class AsyncSandboxDeno:
     def __init__(
         self,
         rpc: AsyncRpcClient,
         processes: builtins.list[AsyncChildProcess],
+        client: AsyncConsoleClient,
+        sandbox_id: str,
     ):
         self._rpc = rpc
         self._processes = processes
+        self._client = client
+        self._sandbox_id = sandbox_id
 
     async def run(
         self,
@@ -520,6 +675,77 @@ class AsyncSandboxDeno:
         self._processes.append(process)
         return process
 
+    async def deploy(
+        self, app: str, *, options: Optional[DeployOptions] = None
+    ) -> AsyncBuild:
+        """Deploy the contents of the sandbox to the specified app in Deno Deploy platform.
+
+        Args:
+            app: The app ID or slug to deploy to.
+            options: Deployment configuration options.
+
+        Returns:
+            An AsyncBuild object with the revision ID and methods to check status and logs.
+
+        Example:
+            ```python
+            from deno_sandbox import AsyncDenoDeploy
+
+            async with AsyncDenoDeploy() as client:
+                async with client.sandbox.create() as sandbox:
+                    await sandbox.fs.write_text_file(
+                        "main.ts",
+                        'Deno.serve(() => new Response("Hi from sandbox.deploy()"))',
+                    )
+                    build = await sandbox.deno.deploy("my-deno-app", options={
+                        "build": {"entrypoint": "main.ts"}
+                    })
+                    print(f"Deployed revision ID: {build.id}")
+                    revision = await build.done
+                    print(f"Revision status: {revision['status']}")
+            ```
+        """
+        url = self._client._options["console_url"].join(f"/api/v2/apps/{app}/deploy")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._client._options['token']}",
+        }
+
+        # Build request body
+        body: dict[str, Any] = {
+            "entrypoint": (
+                options.get("build", {}).get("entrypoint", "main.ts")
+                if options
+                else "main.ts"
+            ),
+            "sandboxId": self._sandbox_id,
+        }
+
+        if options:
+            if "build" in options and "args" in options["build"]:
+                body["args"] = options["build"]["args"]
+            if "production" in options:
+                body["production"] = options["production"]
+            if "preview" in options:
+                body["preview"] = options["preview"]
+            if "path" in options:
+                body["path"] = options["path"]
+            else:
+                body["path"] = "/app"
+        else:
+            body["path"] = "/app"
+
+        # Make the deploy request
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.post(
+                str(url), headers=headers, json=body, timeout=30.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            revision_id = result["revisionId"]
+
+        return AsyncBuild(revision_id, app, self._client)
+
 
 class SandboxDeno:
     def __init__(
@@ -527,11 +753,14 @@ class SandboxDeno:
         rpc: AsyncRpcClient,
         bridge: AsyncBridge,
         processes: builtins.list[AsyncChildProcess],
+        client: AsyncConsoleClient,
+        sandbox_id: str,
     ):
         self._rpc = rpc
         self._bridge = bridge
+        self._client = client
 
-        self._async = AsyncSandboxDeno(rpc, processes)
+        self._async = AsyncSandboxDeno(rpc, processes, client, sandbox_id)
 
     def run(
         self,
@@ -632,6 +861,37 @@ class SandboxDeno:
         )
         return DenoRepl(self._rpc, self._bridge, async_repl)
 
+    def deploy(self, app: str, *, options: Optional[DeployOptions] = None) -> Build:
+        """Deploy the contents of the sandbox to the specified app in Deno Deploy platform.
+
+        Args:
+            app: The app ID or slug to deploy to.
+            options: Deployment configuration options.
+
+        Returns:
+            A Build object with the revision ID and methods to check status and logs.
+
+        Example:
+            ```python
+            from deno_sandbox import DenoDeploy
+
+            client = DenoDeploy()
+            with client.sandbox.create() as sandbox:
+                sandbox.fs.write_text_file(
+                    "main.ts",
+                    'Deno.serve(() => new Response("Hi from sandbox.deploy()"))',
+                )
+                build = sandbox.deno.deploy("my-deno-app", options={
+                    "build": {"entrypoint": "main.ts"}
+                })
+                print(f"Deployed revision ID: {build.id}")
+                revision = build.done
+                print(f"Revision status: {revision['status']}")
+            ```
+        """
+        async_build = self._bridge.run(self._async.deploy(app, options=options))
+        return Build(async_build.id, app, self._client, self._bridge)
+
 
 class AsyncSandbox:
     def __init__(
@@ -645,7 +905,7 @@ class AsyncSandbox:
         self.ssh: None = None
         self.id = sandbox_id
         self.fs = AsyncSandboxFs(rpc)
-        self.deno = AsyncSandboxDeno(rpc, self._processes)
+        self.deno = AsyncSandboxDeno(rpc, self._processes, client, sandbox_id)
         self.env = AsyncSandboxEnv(rpc)
 
     @property
@@ -839,7 +1099,9 @@ class Sandbox:
         self.ssh: None = None
         self.id = async_sandbox.id
         self.fs = SandboxFs(rpc, bridge)
-        self.deno = SandboxDeno(rpc, bridge, self._async._processes)
+        self.deno = SandboxDeno(
+            rpc, bridge, self._async._processes, client, async_sandbox.id
+        )
         self.env = SandboxEnv(rpc, bridge)
 
     @property

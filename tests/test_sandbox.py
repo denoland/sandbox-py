@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
 import httpx
 import pytest
+import uuid
 
 from deno_sandbox import AsyncDenoDeploy, DenoDeploy
 from deno_sandbox.errors import RpcValidationError, UnknownRpcMethod
+
+
+def gen_app_name() -> str:
+    return f"test-deploy-{uuid.uuid4().hex[:8]}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -208,3 +213,114 @@ async def test_rpc_missing_method(async_shared_sandbox) -> None:
 async def test_rpc_wrong_params(async_shared_sandbox) -> None:
     with pytest.raises(RpcValidationError):
         await async_shared_sandbox._rpc.call("readTextFile", {})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_deno_deploy_async():
+    sdk = AsyncDenoDeploy()
+
+    # Create a test app
+    app_slug = gen_app_name()
+    app = await sdk.apps.create(slug=app_slug)
+
+    try:
+        # Create sandbox and deploy
+        async with sdk.sandbox.create() as sandbox:
+            # Write a simple Deno server file
+            await sandbox.fs.write_text_file(
+                "main.ts",
+                'Deno.serve(() => new Response("Hello from test!"))',
+            )
+
+            # Deploy to the app
+            build = await sandbox.deno.deploy(
+                app["slug"],
+                options={
+                    "build": {"entrypoint": "main.ts"},
+                    "production": False,
+                },
+            )
+
+            # Verify build object
+            assert build is not None
+            assert build.id is not None
+            assert isinstance(build.id, str)
+
+            # Test logs streaming
+            log_count = 0
+            async for log in build.logs():
+                assert "timestamp" in log
+                assert "level" in log
+                assert "message" in log
+                assert log["level"] in ["info", "error"]
+                log_count += 1
+                # Only check first few logs to avoid long wait
+                if log_count >= 5:
+                    break
+
+            # Test wait method
+            revision = await build.wait()
+            assert revision is not None
+            assert revision["id"] == build.id
+            assert revision["status"] in ["building", "ready", "error", "routed"]
+            assert "created_at" in revision
+            assert "updated_at" in revision
+
+    finally:
+        # Clean up the app
+        await sdk.apps.delete(app["id"])
+
+
+def test_deno_deploy_sync():
+    sdk = DenoDeploy()
+
+    # Create a test app
+    app_slug = gen_app_name()
+    app = sdk.apps.create(slug=app_slug)
+
+    try:
+        # Create sandbox and deploy
+        with sdk.sandbox.create() as sandbox:
+            # Write a simple Deno server file
+            sandbox.fs.write_text_file(
+                "main.ts",
+                'Deno.serve(() => new Response("Hello from test!"))',
+            )
+
+            # Deploy to the app
+            build = sandbox.deno.deploy(
+                app["slug"],
+                options={
+                    "build": {"entrypoint": "main.ts"},
+                    "production": False,
+                },
+            )
+
+            # Verify build object
+            assert build is not None
+            assert build.id is not None
+            assert isinstance(build.id, str)
+
+            # Test logs
+            logs = build.logs()
+            assert logs is not None
+            assert isinstance(logs, list)
+            # At least one log should be present
+            if len(logs) > 0:
+                log = logs[0]
+                assert "timestamp" in log
+                assert "level" in log
+                assert "message" in log
+                assert log["level"] in ["info", "error"]
+
+            # Test wait method
+            revision = build.wait()
+            assert revision is not None
+            assert revision["id"] == build.id
+            assert revision["status"] in ["building", "ready", "error", "routed"]
+            assert "created_at" in revision
+            assert "updated_at" in revision
+
+    finally:
+        # Clean up the app
+        sdk.apps.delete(app["id"])
