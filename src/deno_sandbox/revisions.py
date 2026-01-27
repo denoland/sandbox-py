@@ -18,7 +18,7 @@ class RevisionWithoutTimelines(TypedDict):
     id: str
     """The unique identifier for the revision."""
 
-    status: Literal["building", "ready", "error"]
+    status: Literal["building", "ready", "error", "routed"]
     """The status of the revision."""
 
     created_at: str
