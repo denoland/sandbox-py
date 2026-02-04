@@ -51,6 +51,7 @@ class AsyncRpcClient:
         self.__loop: asyncio.AbstractEventLoop | None = None
         self._signal_id = 0
         self._stream_id = 0
+        self._debug = transport._debug
 
     @property
     def _loop(self) -> asyncio.AbstractEventLoop:

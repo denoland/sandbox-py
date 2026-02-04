@@ -184,7 +184,7 @@ class AsyncSandboxApi:
         url = self._client._options["sandbox_ws_url"].join("/api/v3/sandboxes/create")
         token = self._client._options["token"]
 
-        transport = WebSocketTransport()
+        transport = WebSocketTransport(debug=debug if debug is not None else False)
         ws = await transport.connect(
             url=url,
             headers={
@@ -204,6 +204,9 @@ class AsyncSandboxApi:
         if sandbox_id is None:
             raise Exception("Sandbox ID not found in response headers")
 
+        if debug:
+            print(f"Trace ID: {response.headers.get('x-deno-trace-id', 'n/a')}")
+
         sandbox = None
         try:
             rpc = AsyncRpcClient(transport)
@@ -217,17 +220,20 @@ class AsyncSandboxApi:
     async def connect(
         self,
         sandbox_id: str,
+        *,
+        debug: Optional[bool] = None,
     ) -> AsyncIterator[AsyncSandbox]:
         """Connects to an existing sandbox instance.
 
         Args:
             sandbox_id: The unique id of the sandbox to connect to.
+            debug: Enable debug logging for the sandbox connection.
         """
         url = self._client._options["sandbox_ws_url"].join(
             f"/api/v3/sandbox/{sandbox_id}/connect"
         )
         token = self._client._options["token"]
-        transport = WebSocketTransport()
+        transport = WebSocketTransport(debug=debug if debug is not None else False)
         await transport.connect(
             url=url,
             headers={
@@ -331,16 +337,16 @@ class SandboxApi:
     def connect(
         self,
         sandbox_id: str,
+        *,
+        debug: Optional[bool] = None,
     ):
         """Connects to an existing sandbox instance.
 
         Args:
             sandbox_id: The unique id of the sandbox to connect to.
-            region: If the sandbox was created in a non-default region, the region where the sandbox is running.
             debug: Enable debug logging for the sandbox connection.
-            ssh: Whether to expose SSH access to the sandbox.
         """
-        async_cm = self._async.connect(sandbox_id)
+        async_cm = self._async.connect(sandbox_id, debug=debug)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
         try:

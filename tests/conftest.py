@@ -7,7 +7,7 @@ from deno_sandbox import AsyncDenoDeploy, DenoDeploy
 async def async_shared_sandbox():
     sdk = AsyncDenoDeploy()
 
-    async with sdk.sandbox.create() as sandbox:
+    async with sdk.sandbox.create(debug=True) as sandbox:
         yield sandbox
 
 
@@ -15,5 +15,5 @@ async def async_shared_sandbox():
 def shared_sandbox():
     sdk = DenoDeploy()
 
-    with sdk.sandbox.create() as sandbox:
+    with sdk.sandbox.create(debug=True) as sandbox:
         yield sandbox
