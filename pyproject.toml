@@ -11,6 +11,10 @@ dependencies = [
     "websockets>=15.0.1",
 ]
 
+[project.urls]
+Repository = "https://github.com/denoland/sandbox-py"
+Homepage = "https://deno.com/deploy/sandbox"
+
 [build-system]
 requires = ["uv_build>=0.9.13,<0.10.0"]
 build-backend = "uv_build"
