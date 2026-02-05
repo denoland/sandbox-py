@@ -210,7 +210,12 @@ class AsyncSandboxApi:
         sandbox = None
         try:
             rpc = AsyncRpcClient(transport)
-            sandbox = AsyncSandbox(self._client, rpc, sandbox_id, trace_id=response.headers.get('x-deno-trace-id'))
+            sandbox = AsyncSandbox(
+                self._client,
+                rpc,
+                sandbox_id,
+                trace_id=response.headers.get("x-deno-trace-id"),
+            )
             yield sandbox
         finally:
             if sandbox is not None:
@@ -891,7 +896,11 @@ class SandboxDeno:
 
 class AsyncSandbox:
     def __init__(
-        self, client: AsyncConsoleClient, rpc: AsyncRpcClient, sandbox_id: str, trace_id: str | None = None
+        self,
+        client: AsyncConsoleClient,
+        rpc: AsyncRpcClient,
+        sandbox_id: str,
+        trace_id: str | None = None,
     ):
         self._client = client
         self._rpc = rpc
