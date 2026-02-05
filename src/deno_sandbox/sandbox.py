@@ -184,7 +184,7 @@ class AsyncSandboxApi:
         url = self._client._options["sandbox_ws_url"].join("/api/v3/sandboxes/create")
         token = self._client._options["token"]
 
-        transport = WebSocketTransport()
+        transport = WebSocketTransport(debug=debug if debug is not None else False)
         ws = await transport.connect(
             url=url,
             headers={
@@ -204,10 +204,18 @@ class AsyncSandboxApi:
         if sandbox_id is None:
             raise Exception("Sandbox ID not found in response headers")
 
+        if debug:
+            print(f"Trace ID: {response.headers.get('x-deno-trace-id', 'n/a')}")
+
         sandbox = None
         try:
             rpc = AsyncRpcClient(transport)
-            sandbox = AsyncSandbox(self._client, rpc, sandbox_id)
+            sandbox = AsyncSandbox(
+                self._client,
+                rpc,
+                sandbox_id,
+                trace_id=response.headers.get("x-deno-trace-id"),
+            )
             yield sandbox
         finally:
             if sandbox is not None:
@@ -217,17 +225,20 @@ class AsyncSandboxApi:
     async def connect(
         self,
         sandbox_id: str,
+        *,
+        debug: Optional[bool] = None,
     ) -> AsyncIterator[AsyncSandbox]:
         """Connects to an existing sandbox instance.
 
         Args:
             sandbox_id: The unique id of the sandbox to connect to.
+            debug: Enable debug logging for the sandbox connection.
         """
         url = self._client._options["sandbox_ws_url"].join(
             f"/api/v3/sandbox/{sandbox_id}/connect"
         )
         token = self._client._options["token"]
-        transport = WebSocketTransport()
+        transport = WebSocketTransport(debug=debug if debug is not None else False)
         await transport.connect(
             url=url,
             headers={
@@ -331,16 +342,16 @@ class SandboxApi:
     def connect(
         self,
         sandbox_id: str,
+        *,
+        debug: Optional[bool] = None,
     ):
         """Connects to an existing sandbox instance.
 
         Args:
             sandbox_id: The unique id of the sandbox to connect to.
-            region: If the sandbox was created in a non-default region, the region where the sandbox is running.
             debug: Enable debug logging for the sandbox connection.
-            ssh: Whether to expose SSH access to the sandbox.
         """
-        async_cm = self._async.connect(sandbox_id)
+        async_cm = self._async.connect(sandbox_id, debug=debug)
         async_handle = self._bridge.run(async_cm.__aenter__())
 
         try:
@@ -885,7 +896,11 @@ class SandboxDeno:
 
 class AsyncSandbox:
     def __init__(
-        self, client: AsyncConsoleClient, rpc: AsyncRpcClient, sandbox_id: str
+        self,
+        client: AsyncConsoleClient,
+        rpc: AsyncRpcClient,
+        sandbox_id: str,
+        trace_id: str | None = None,
     ):
         self._client = client
         self._rpc = rpc
@@ -894,6 +909,7 @@ class AsyncSandbox:
         self.url: str | None = None
         self.ssh: None = None
         self.id = sandbox_id
+        self.trace_id: str | None = trace_id
         self.fs = AsyncSandboxFs(rpc)
         self.deno = AsyncSandboxDeno(rpc, self._processes, client, sandbox_id)
         self.env = AsyncSandboxEnv(rpc)
@@ -1088,6 +1104,7 @@ class Sandbox:
         self.url: str | None = None
         self.ssh: None = None
         self.id = async_sandbox.id
+        self.trace_id: str | None = async_sandbox.trace_id
         self.fs = SandboxFs(rpc, bridge)
         self.deno = SandboxDeno(
             rpc, bridge, self._async._processes, client, async_sandbox.id
