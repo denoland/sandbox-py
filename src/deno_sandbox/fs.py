@@ -18,7 +18,7 @@ from typing import (
 from re import Pattern
 
 from .process import AbortSignal
-from .stream import stream_data
+from .stream import complete_stream, start_stream
 from .utils import convert_to_camel_case, convert_to_snake_case
 
 if TYPE_CHECKING:
@@ -317,13 +317,13 @@ class AsyncSandboxFs:
             mode: Set the file permission mode.
         """
         if isinstance(data, bytes):
-            # Stream bytes as a single chunk
-            content_stream_id = await stream_data(self._rpc, iter([data]))
+            streamable = iter([data])
         else:
-            # Stream data from iterable/file object
-            content_stream_id = await stream_data(self._rpc, data)
+            streamable = data
 
-        params: dict[str, Any] = {"path": path, "contentStreamId": content_stream_id}
+        stream_id, writer = await start_stream(self._rpc)
+
+        params: dict[str, Any] = {"path": path, "contentStreamId": stream_id}
         options: dict[str, Any] = {}
         if create is not None:
             options["create"] = create
@@ -335,7 +335,20 @@ class AsyncSandboxFs:
             options["mode"] = mode
         if options:
             params["options"] = convert_to_camel_case(options)
-        await self._rpc.call("writeFile", params)
+
+        # Send data concurrently with the RPC call to avoid deadlock:
+        # the server waits for stream data before responding to writeFile.
+        async def _send() -> None:
+            try:
+                await complete_stream(writer, streamable)
+            except Exception as e:
+                await writer.error(str(e))
+
+        task = self._rpc._loop.create_task(_send())
+        try:
+            await self._rpc.call("writeFile", params)
+        finally:
+            await task
 
     async def read_text_file(
         self,

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import tempfile
@@ -163,6 +164,26 @@ def test_write_file_large_stream_sync(shared_sandbox):
     content = sb.fs.read_file("test_large_sync.txt")
     assert len(content) == 102400
     assert content == b"x" * 102400
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_write_file_slow_async_generator(async_shared_sandbox):
+    """Test write_file with a slow async generator that yields chunks with delays.
+
+    This verifies that stream data is sent concurrently with the RPC call.
+    With incorrect ordering (all data sent before RPC), this would deadlock
+    because the server waits for stream data before responding to writeFile.
+    """
+    sb = async_shared_sandbox
+
+    async def slow_chunks():
+        for i in range(5):
+            await asyncio.sleep(0.05)
+            yield f"chunk{i} ".encode()
+
+    await sb.fs.write_file("test_slow_async.txt", slow_chunks())
+    content = await sb.fs.read_file("test_slow_async.txt")
+    assert content == b"chunk0 chunk1 chunk2 chunk3 chunk4 "
 
 
 # stdin streaming tests for spawn
