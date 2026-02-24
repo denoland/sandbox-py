@@ -44,6 +44,7 @@ from .rpc import AsyncFetchResponse, AsyncRpcClient, FetchResponse
 from .transport import (
     WebSocketTransport,
 )
+from .options import get_sandbox_ws_url
 from .revisions import Revision
 
 
@@ -181,7 +182,8 @@ class AsyncSandboxApi:
 
         json_config = json.dumps(app_config, separators=(",", ":")).encode("utf-8")
 
-        url = self._client._options["sandbox_ws_url"].join("/api/v3/sandboxes/create")
+        ws_base = get_sandbox_ws_url(self._client._options, region)
+        url = ws_base.join("/api/v3/sandboxes/create")
         token = self._client._options["token"]
 
         transport = WebSocketTransport(debug=debug if debug is not None else False)
@@ -409,35 +411,37 @@ class AsyncBuild:
         """A coroutine that resolves when the build is complete, returning the revision."""
 
         url = self._client._options["console_url"].join(
-            f"/api/v2/apps/{self._app}/revisions/{self.id}/status"
+            f"/api/v2/revisions/{self.id}/progress"
         )
         headers = {
             "Authorization": f"Bearer {self._client._options['token']}",
         }
 
-        async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(str(url), headers=headers)
-            response.raise_for_status()
-            revision_data = response.json()
+        # Stream NDJSON progress updates until the stream closes.
+        # Use a long read timeout since builds can take a while.
+        timeout = httpx.Timeout(10.0, read=120.0)
+        async with httpx.AsyncClient(timeout=timeout) as http_client:
+            async with http_client.stream("GET", str(url), headers=headers) as response:
+                response.raise_for_status()
+                async for _line in response.aiter_lines():
+                    pass  # consume progress updates until stream ends
 
-            # Fetch timelines
-            timelines_url = self._client._options["console_url"].join(
-                f"/api/v2/apps/{self._app}/revisions/{self.id}/timelines"
+            # Fetch the final revision state
+            revision_url = self._client._options["console_url"].join(
+                f"/api/v2/revisions/{self.id}"
             )
-            timelines_response = await http_client.get(
-                str(timelines_url), headers=headers
+            revision_response = await http_client.get(
+                str(revision_url), headers=headers
             )
-            timelines_response.raise_for_status()
-            timelines_data = timelines_response.json()
+            revision_response.raise_for_status()
+            revision_data = revision_response.json()
 
-            result = convert_to_snake_case(revision_data)
-            result["timelines"] = convert_to_snake_case(timelines_data)
-            return cast(Revision, result)
+            return cast(Revision, convert_to_snake_case(revision_data))
 
     async def logs(self) -> AsyncIterator[BuildLog]:
         """An async iterator of build logs."""
         url = self._client._options["console_url"].join(
-            f"/api/v2/apps/{self._app}/revisions/{self.id}/logs"
+            f"/api/v2/revisions/{self.id}/build_logs"
         )
         headers = {
             "Authorization": f"Bearer {self._client._options['token']}",
@@ -673,7 +677,7 @@ class AsyncSandboxDeno:
             app: The app ID or slug to deploy to.
             entrypoint: The entrypoint file path relative to the path option. Defaults to 'main.ts'.
             args: Arguments to pass to the entrypoint script.
-            path: The path to the directory to deploy. If relative, it is relative to /app. Defaults to '/app'.
+            path: The path to the directory to deploy. If relative, it is relative to /home/app. Defaults to '/home/app'.
             production: Whether to deploy in production mode. Defaults to True.
             preview: Whether to deploy a preview deployment. Defaults to False.
 
@@ -696,7 +700,9 @@ class AsyncSandboxDeno:
                     print(f"Revision status: {revision['status']}")
             ```
         """
-        url = self._client._options["console_url"].join(f"/api/v2/apps/{app}/deploy")
+        url = self._client._options["console_url"].join(
+            f"/api/v2/sandboxes/{self._sandbox_id}/deploy"
+        )
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._client._options['token']}",
@@ -704,9 +710,11 @@ class AsyncSandboxDeno:
 
         # Build request body
         body: dict[str, Any] = {
+            "app": app,
             "entrypoint": entrypoint if entrypoint is not None else "main.ts",
-            "sandboxId": self._sandbox_id,
-            "path": path if path is not None else "/app",
+            "path": path if path is not None else "/home/app",
+            "mode": "none",
+            "frameworkPreset": "",
         }
 
         if args is not None:
@@ -723,7 +731,7 @@ class AsyncSandboxDeno:
             )
             response.raise_for_status()
             result = response.json()
-            revision_id = result["revisionId"]
+            revision_id = result["revision_id"]
 
         return AsyncBuild(revision_id, app, self._client)
 
@@ -858,7 +866,7 @@ class SandboxDeno:
             app: The app ID or slug to deploy to.
             entrypoint: The entrypoint file path relative to the path option. Defaults to 'main.ts'.
             args: Arguments to pass to the entrypoint script.
-            path: The path to the directory to deploy. If relative, it is relative to /app. Defaults to '/app'.
+            path: The path to the directory to deploy. If relative, it is relative to /home/app. Defaults to '/home/app'.
             production: Whether to deploy in production mode. Defaults to True.
             preview: Whether to deploy a preview deployment. Defaults to False.
 

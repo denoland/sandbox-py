@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict, cast
-from typing_extensions import Literal, Optional
+import warnings
+from typing import Any, TypedDict, cast, overload
+from typing_extensions import Literal, NotRequired, Optional
 
-from deno_sandbox.timelines import Timeline
+from deno_sandbox.apps import Config, EnvVar, LayerRef
 
 from .bridge import AsyncBridge
 from .console import (
@@ -14,32 +15,101 @@ from .console import (
 from .utils import convert_to_snake_case
 
 
-class RevisionWithoutTimelines(TypedDict):
+class RevisionListItem(TypedDict):
     id: str
     """The unique identifier for the revision."""
 
-    status: Literal["building", "ready", "error", "routed"]
-    """The status of the revision."""
+    status: Literal["skipped", "queued", "building", "succeeded", "failed"]
+    """The current revision lifecycle status."""
+
+    failure_reason: str | None
+    """Reason for failure, or null if not failed."""
 
     created_at: str
     """The ISO 8601 timestamp when the revision was created."""
 
-    updated_at: str
-    """The ISO 8601 timestamp when the revision was last updated."""
+    cancellation_requested_at: str | None
+    """ISO 8601 timestamp when cancellation was requested, or null."""
+
+    build_finished_at: str | None
+    """ISO 8601 timestamp when the build completed, or null if still building."""
+
+    deleted_at: str | None
+    """ISO 8601 timestamp of deletion, or null if active."""
 
 
-class Revision(RevisionWithoutTimelines):
-    timelines: list[Timeline]
-    """The timelines associated with the revision."""
+class Revision(TypedDict):
+    id: str
+    """The unique identifier for the revision."""
+
+    status: Literal["skipped", "queued", "building", "succeeded", "failed"]
+    """The current revision lifecycle status."""
+
+    failure_reason: str | None
+    """Reason for failure, or null if not failed."""
+
+    layers: NotRequired[list[LayerRef]]
+    """Layers referenced by this revision, in priority order."""
+
+    env_vars: NotRequired[list[EnvVar]]
+    """Revision-specific environment variables (immutable once created)."""
+
+    config: NotRequired[Config]
+    """Build and runtime configuration used for this revision."""
+
+    created_at: str
+    """The ISO 8601 timestamp when the revision was created."""
+
+    cancellation_requested_at: str | None
+    """ISO 8601 timestamp when cancellation was requested, or null."""
+
+    build_finished_at: str | None
+    """ISO 8601 timestamp when the build completed, or null if still building."""
+
+    deleted_at: str | None
+    """ISO 8601 timestamp of deletion, or null if active."""
+
+
+# Keep old name as alias for backward compatibility
+RevisionWithoutTimelines = RevisionListItem
 
 
 class AsyncRevisions:
     def __init__(self, client: AsyncConsoleClient):
         self._client = client
 
-    async def get(self, app: str, id: str) -> Revision | None:
-        """Get a revision by its ID for a specific app."""
-        result = await self._client.get_or_none(f"/api/v2/apps/{app}/revisions/{id}")
+    @overload
+    async def get(self, id: str) -> Revision | None: ...
+
+    @overload
+    async def get(self, app: str, id: str) -> Revision | None: ...
+
+    async def get(self, *args: str) -> Revision | None:
+        """Get a revision by its ID.
+
+        Args:
+            id: The revision ID (globally unique).
+
+        .. deprecated::
+            The two-argument form ``get(app, id)`` is deprecated.
+            Use ``get(id)`` instead — revision IDs are globally unique.
+        """
+        if len(args) == 2:
+            warnings.warn(
+                "revisions.get(app, id) is deprecated. "
+                "Use revisions.get(id) instead — revision IDs are globally unique.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            revision_id = args[1]
+        elif len(args) == 1:
+            revision_id = args[0]
+        else:
+            raise TypeError(
+                f"get() takes 1 or 2 positional arguments but {len(args)} were given"
+            )
+
+        result = await self._client.get_or_none(f"/api/v2/revisions/{revision_id}")
         if result is None:
             return None
         raw_result = convert_to_snake_case(result)
@@ -51,7 +121,7 @@ class AsyncRevisions:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> AsyncPaginatedList[RevisionWithoutTimelines]:
+    ) -> AsyncPaginatedList[RevisionListItem]:
         """List revisions for a specific app.
 
         Args:
@@ -70,6 +140,20 @@ class AsyncRevisions:
             params=options if options else None,
         )
 
+    async def cancel(self, revision: str) -> Revision:
+        """Cancel a revision build.
+
+        Cancellation is asynchronous — this returns immediately with the current
+        revision state. The ``cancellation_requested_at`` field will be set, but
+        the revision may still be in ``building`` status. Poll the revision or use
+        the progress endpoint to wait for the ``failed`` state.
+
+        Args:
+            revision: The revision ID.
+        """
+        result = await self._client.post(f"/api/v2/revisions/{revision}/cancel", {})
+        return cast(Revision, convert_to_snake_case(result))
+
 
 class Revisions:
     def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
@@ -77,9 +161,23 @@ class Revisions:
         self._bridge = bridge
         self._async = AsyncRevisions(client)
 
-    def get(self, app: str, id: str) -> Revision | None:
-        """Get a revision by its ID for a specific app."""
-        return self._bridge.run(self._async.get(app, id))
+    @overload
+    def get(self, id: str) -> Revision | None: ...
+
+    @overload
+    def get(self, app: str, id: str) -> Revision | None: ...
+
+    def get(self, *args: str) -> Revision | None:
+        """Get a revision by its ID.
+
+        Args:
+            id: The revision ID (globally unique).
+
+        .. deprecated::
+            The two-argument form ``get(app, id)`` is deprecated.
+            Use ``get(id)`` instead — revision IDs are globally unique.
+        """
+        return self._bridge.run(self._async.get(*args))
 
     def list(
         self,
@@ -87,7 +185,7 @@ class Revisions:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> PaginatedList[RevisionWithoutTimelines]:
+    ) -> PaginatedList[RevisionListItem]:
         """List revisions for a specific app.
 
         Args:
@@ -97,3 +195,11 @@ class Revisions:
         """
         paginated = self._bridge.run(self._async.list(app, cursor=cursor, limit=limit))
         return PaginatedList(self._bridge, paginated)
+
+    def cancel(self, revision: str) -> Revision:
+        """Cancel a revision build.
+
+        Args:
+            revision: The revision ID.
+        """
+        return self._bridge.run(self._async.cancel(revision))

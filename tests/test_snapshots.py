@@ -10,6 +10,7 @@ def gen_volume_name() -> str:
     return f"test-volume-{uuid.uuid4().hex[:8]}"
 
 
+@pytest.mark.timeout(60)
 @pytest.mark.asyncio(loop_scope="session")
 async def test_volume_create_root_async():
     sdk = AsyncDenoDeploy()
@@ -32,12 +33,12 @@ async def test_volume_create_root_async():
     assert volume == expected
 
     async with sdk.sandbox.create(root=volume["slug"], region="ord") as sb:
-        await sb.fs.write_text_file("/app/foo.txt", "foo")
+        await sb.fs.write_text_file("/home/app/foo.txt", "foo")
         cp = await sb.spawn("sync")
         await cp.wait()
 
     await asyncio.sleep(1)
 
     async with sdk.sandbox.create(root=volume["slug"], region="ord") as sb:
-        content = await sb.fs.read_text_file("/app/foo.txt")
+        content = await sb.fs.read_text_file("/home/app/foo.txt")
         assert content == "foo"
