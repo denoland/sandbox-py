@@ -1,7 +1,7 @@
 import pytest
 import uuid
 
-from deno_sandbox import AsyncDenoDeploy, DenoDeploy
+from deno_sandbox import AsyncDenoDeploy, Config, DenoDeploy, EnvVarInput
 
 
 def gen_app_name() -> str:
@@ -53,7 +53,7 @@ async def test_apps_create_with_env_vars_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_app_name()
-    env_vars = [{"key": "MY_VAR", "value": "hello"}]
+    env_vars: list[EnvVarInput] = [{"key": "MY_VAR", "value": "hello"}]
     app = await sdk.apps.create(slug=slug, env_vars=env_vars)
 
     assert app["slug"] == slug
@@ -67,7 +67,7 @@ def test_apps_create_with_env_vars_sync():
     sdk = DenoDeploy()
 
     slug = gen_app_name()
-    env_vars = [{"key": "MY_VAR", "value": "hello"}]
+    env_vars: list[EnvVarInput] = [{"key": "MY_VAR", "value": "hello"}]
     app = sdk.apps.create(slug=slug, env_vars=env_vars)
 
     assert app["slug"] == slug
@@ -82,7 +82,7 @@ async def test_apps_create_with_config_async():
     sdk = AsyncDenoDeploy()
 
     slug = gen_app_name()
-    config = {"runtime": {"type": "dynamic", "entrypoint": "main.ts"}}
+    config: Config = {"runtime": {"type": "dynamic", "entrypoint": "main.ts"}}
     app = await sdk.apps.create(slug=slug, config=config)
 
     assert app["slug"] == slug
@@ -95,7 +95,7 @@ def test_apps_create_with_config_sync():
     sdk = DenoDeploy()
 
     slug = gen_app_name()
-    config = {"runtime": {"type": "dynamic", "entrypoint": "main.ts"}}
+    config: Config = {"runtime": {"type": "dynamic", "entrypoint": "main.ts"}}
     app = sdk.apps.create(slug=slug, config=config)
 
     assert app["slug"] == slug

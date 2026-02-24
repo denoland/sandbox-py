@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict, Union, cast
+from typing import Any, List, TypedDict, Union, cast
 from typing_extensions import Literal, NotRequired, Optional
 
 from .utils import convert_to_snake_case
@@ -224,7 +224,7 @@ class AsyncApps:
         self,
         *,
         slug: Optional[str] = None,
-        env_vars: Optional[list[EnvVarInput]] = None,
+        env_vars: Optional[List[EnvVarInput]] = None,
         config: Optional[Config] = None,
     ) -> App:
         """Create a new app.
@@ -250,7 +250,7 @@ class AsyncApps:
         app: str,
         *,
         slug: Optional[str] = None,
-        env_vars: Optional[list[EnvVarUpdate]] = None,
+        env_vars: Optional[List[EnvVarUpdate]] = None,
         config: Optional[Config] = None,
     ) -> App:
         """Update an existing app.
@@ -346,7 +346,7 @@ class Apps:
         self,
         *,
         slug: Optional[str] = None,
-        env_vars: Optional[list[EnvVarInput]] = None,
+        env_vars: Optional[List[EnvVarInput]] = None,
         config: Optional[Config] = None,
     ) -> App:
         """Create a new app.
@@ -365,7 +365,7 @@ class Apps:
         app: str,
         *,
         slug: Optional[str] = None,
-        env_vars: Optional[list[EnvVarUpdate]] = None,
+        env_vars: Optional[List[EnvVarUpdate]] = None,
         config: Optional[Config] = None,
     ) -> App:
         """Update an existing app.
