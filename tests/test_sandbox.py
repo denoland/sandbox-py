@@ -261,7 +261,13 @@ async def test_deno_deploy_async():
             revision = await build.wait()
             assert revision is not None
             assert revision["id"] == build.id
-            assert revision["status"] in ["skipped", "queued", "building", "succeeded", "failed"]
+            assert revision["status"] in [
+                "skipped",
+                "queued",
+                "building",
+                "succeeded",
+                "failed",
+            ]
             assert "created_at" in revision
 
     finally:
@@ -314,7 +320,13 @@ def test_deno_deploy_sync():
             revision = build.wait()
             assert revision is not None
             assert revision["id"] == build.id
-            assert revision["status"] in ["skipped", "queued", "building", "succeeded", "failed"]
+            assert revision["status"] in [
+                "skipped",
+                "queued",
+                "building",
+                "succeeded",
+                "failed",
+            ]
             assert "created_at" in revision
 
     finally:

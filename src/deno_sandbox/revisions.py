@@ -105,7 +105,9 @@ class AsyncRevisions:
         elif len(args) == 1:
             revision_id = args[0]
         else:
-            raise TypeError(f"get() takes 1 or 2 positional arguments but {len(args)} were given")
+            raise TypeError(
+                f"get() takes 1 or 2 positional arguments but {len(args)} were given"
+            )
 
         result = await self._client.get_or_none(f"/api/v2/revisions/{revision_id}")
         if result is None:
@@ -191,9 +193,7 @@ class Revisions:
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
         """
-        paginated = self._bridge.run(
-            self._async.list(app, cursor=cursor, limit=limit)
-        )
+        paginated = self._bridge.run(self._async.list(app, cursor=cursor, limit=limit))
         return PaginatedList(self._bridge, paginated)
 
     def cancel(self, revision: str) -> Revision:

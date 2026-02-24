@@ -82,8 +82,16 @@ class Runtime(TypedDict, total=False):
 
 class Config(TypedDict, total=False):
     framework: Literal[
-        "", "nextjs", "astro", "nuxt", "remix",
-        "solidstart", "tanstackstart", "sveltekit", "fresh", "lume",
+        "",
+        "nextjs",
+        "astro",
+        "nuxt",
+        "remix",
+        "solidstart",
+        "tanstackstart",
+        "sveltekit",
+        "fresh",
+        "lume",
     ]
     """Framework preset. Mutually exclusive with ``runtime``."""
 
@@ -331,9 +339,7 @@ class Apps:
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
         """
-        paginated = self._bridge.run(
-            self._async.list(cursor=cursor, limit=limit)
-        )
+        paginated = self._bridge.run(self._async.list(cursor=cursor, limit=limit))
         return PaginatedList(self._bridge, paginated)
 
     def create(
@@ -404,7 +410,13 @@ class Apps:
         """
         return self._bridge.run(
             self._async.logs(
-                app, start=start, end=end, revision_id=revision_id,
-                level=level, query=query, cursor=cursor, limit=limit,
+                app,
+                start=start,
+                end=end,
+                revision_id=revision_id,
+                level=level,
+                query=query,
+                cursor=cursor,
+                limit=limit,
             )
         )

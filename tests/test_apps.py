@@ -48,7 +48,6 @@ def test_apps_create_options_sync():
     sdk.apps.delete(app["id"])
 
 
-
 @pytest.mark.asyncio(loop_scope="session")
 async def test_apps_create_with_env_vars_async():
     sdk = AsyncDenoDeploy()
@@ -139,7 +138,6 @@ async def test_apps_update_sync():
     sdk.apps.delete(app["id"])
 
 
-
 @pytest.mark.asyncio(loop_scope="session")
 async def test_apps_update_env_vars_async():
     sdk = AsyncDenoDeploy()
@@ -227,4 +225,3 @@ def test_apps_list_sync():
         assert any(a["id"] == app["id"] for a in apps.items)
     finally:
         sdk.apps.delete(app["id"])
-

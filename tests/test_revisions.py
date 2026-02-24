@@ -38,7 +38,6 @@ def test_revisions_list_sync():
         sdk.apps.delete(app["id"])
 
 
-
 @pytest.mark.timeout(60)
 @pytest.mark.asyncio(loop_scope="session")
 async def test_revisions_get_async():
@@ -58,7 +57,13 @@ async def test_revisions_get_async():
         fetched = await sdk.revisions.get(revision["id"])
         assert fetched is not None
         assert fetched["id"] == revision["id"]
-        assert fetched["status"] in ["skipped", "queued", "building", "succeeded", "failed"]
+        assert fetched["status"] in [
+            "skipped",
+            "queued",
+            "building",
+            "succeeded",
+            "failed",
+        ]
     finally:
         await sdk.apps.delete(app["id"])
 
@@ -81,7 +86,13 @@ def test_revisions_get_sync():
         fetched = sdk.revisions.get(revision["id"])
         assert fetched is not None
         assert fetched["id"] == revision["id"]
-        assert fetched["status"] in ["skipped", "queued", "building", "succeeded", "failed"]
+        assert fetched["status"] in [
+            "skipped",
+            "queued",
+            "building",
+            "succeeded",
+            "failed",
+        ]
     finally:
         sdk.apps.delete(app["id"])
 
