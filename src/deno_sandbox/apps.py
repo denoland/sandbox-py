@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict, cast
-from typing_extensions import Optional
+from typing import Any, TypedDict, Union, cast
+from typing_extensions import Literal, NotRequired, Optional
 
 from .utils import convert_to_snake_case
 from .bridge import AsyncBridge
@@ -12,12 +12,165 @@ from .console import (
 )
 
 
+class EnvVar(TypedDict):
+    id: str
+    """Unique identifier for the environment variable."""
+
+    key: str
+    """The environment variable name."""
+
+    value: NotRequired[str]
+    """The value. Omitted when ``secret`` is true."""
+
+    secret: bool
+    """Whether the value is masked in API responses."""
+
+    contexts: Union[Literal["all"], list[str]]
+    """Deployment contexts this variable applies to."""
+
+
+class EnvVarInput(TypedDict, total=False):
+    key: str
+    """The environment variable name."""
+
+    value: str
+    """The environment variable value."""
+
+    secret: bool
+    """Whether to mask the value in API responses."""
+
+    contexts: Union[Literal["all"], list[str]]
+    """Deployment contexts this variable applies to."""
+
+
+class EnvVarUpdate(TypedDict, total=False):
+    id: str
+    """ID of the existing variable to update or delete."""
+
+    key: str
+    """Variable name. Used for matching when ``id`` is not provided."""
+
+    value: str
+    """New value for the variable."""
+
+    secret: bool
+    """Whether to mask the value in API responses."""
+
+    contexts: Union[Literal["all"], list[str]]
+    """Deployment contexts this variable applies to."""
+
+    delete: bool
+    """Set to true to remove this variable."""
+
+
+class Runtime(TypedDict, total=False):
+    type: Literal["dynamic", "static"]
+    """``dynamic`` runs a Deno process; ``static`` serves pre-built files."""
+
+    entrypoint: str
+    """Main module path. Required when ``type`` is ``dynamic``."""
+
+    args: list[str]
+    """Additional CLI arguments passed to the entrypoint."""
+
+    cwd: str
+    """Working directory or static file root."""
+
+    spa: bool
+    """Enable single-page application mode. Only for ``static`` type."""
+
+
+class Config(TypedDict, total=False):
+    framework: Literal[
+        "", "nextjs", "astro", "nuxt", "remix",
+        "solidstart", "tanstackstart", "sveltekit", "fresh", "lume",
+    ]
+    """Framework preset. Mutually exclusive with ``runtime``."""
+
+    install: str | None
+    """Custom install command. Omit to skip the install step."""
+
+    build: str | None
+    """Custom build command. Omit to skip the build step."""
+
+    predeploy: str | None
+    """Command to run before each deployment. Omit to skip."""
+
+    runtime: Runtime
+    """Runtime configuration. Mutually exclusive with ``framework``."""
+
+
+class LayerRef(TypedDict):
+    id: str
+    """Unique layer identifier."""
+
+    slug: str
+    """Human-readable layer slug."""
+
+
+class RuntimeLog(TypedDict, total=False):
+    timestamp: str
+    """ISO 8601 timestamp of the log entry."""
+
+    level: Literal["debug", "info", "warn", "error"]
+    """Log severity level."""
+
+    message: str
+    """Log message content."""
+
+    revision_id: str
+    """Revision that produced this log entry."""
+
+    region: str
+    """Region where the isolate was running."""
+
+    trace_id: str
+    """OpenTelemetry trace ID for request correlation."""
+
+    span_id: str
+    """OpenTelemetry span ID."""
+
+
+class RuntimeLogsResponse(TypedDict):
+    logs: list[RuntimeLog]
+    """Array of log entries."""
+
+    next_cursor: str | None
+    """Cursor for fetching the next page, or null if no more results."""
+
+
+class AppListItem(TypedDict):
+    id: str
+    """The unique identifier for the app."""
+
+    slug: str
+    """The human readable identifier for the app."""
+
+    layers: NotRequired[list[LayerRef]]
+    """Layers referenced by this app, in priority order."""
+
+    created_at: str
+    """The ISO 8601 timestamp when the app was created."""
+
+    updated_at: str
+    """The ISO 8601 timestamp when the app was last updated."""
+
+
 class App(TypedDict):
     id: str
     """The unique identifier for the app."""
 
     slug: str
     """The human readable identifier for the app."""
+
+    layers: NotRequired[list[LayerRef]]
+    """Layers referenced by this app, in priority order."""
+
+    env_vars: NotRequired[list[EnvVar]]
+    """App-specific environment variables."""
+
+    config: NotRequired[Config]
+    """Default build and runtime configuration for new revisions."""
 
     created_at: str
     """The ISO 8601 timestamp when the app was created."""
@@ -43,7 +196,7 @@ class AsyncApps:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> AsyncPaginatedList[App]:
+    ) -> AsyncPaginatedList[AppListItem]:
         """List apps of an org.
 
         Args:
@@ -63,15 +216,23 @@ class AsyncApps:
         self,
         *,
         slug: Optional[str] = None,
+        env_vars: Optional[list[EnvVarInput]] = None,
+        config: Optional[Config] = None,
     ) -> App:
         """Create a new app.
 
         Args:
             slug: Human readable identifier for the app.
+            env_vars: App-specific environment variables.
+            config: Default build and runtime configuration.
         """
         options: dict[str, Any] = {}
         if slug is not None:
             options["slug"] = slug
+        if env_vars is not None:
+            options["env_vars"] = env_vars
+        if config is not None:
+            options["config"] = config
         result = await self._client.post("/api/v2/apps", options)
         raw_result = convert_to_snake_case(result)
         return cast(App, raw_result)
@@ -81,16 +242,24 @@ class AsyncApps:
         app: str,
         *,
         slug: Optional[str] = None,
+        env_vars: Optional[list[EnvVarUpdate]] = None,
+        config: Optional[Config] = None,
     ) -> App:
         """Update an existing app.
 
         Args:
             app: The app ID or slug to update.
             slug: Human readable identifier for the app.
+            env_vars: Deep merge with existing environment variables.
+            config: Replace the entire deploy config.
         """
         update: dict[str, Any] = {}
         if slug is not None:
             update["slug"] = slug
+        if env_vars is not None:
+            update["env_vars"] = env_vars
+        if config is not None:
+            update["config"] = config
         result = await self._client.patch(f"/api/v2/apps/{app}", update)
         raw_result = convert_to_snake_case(result)
         return cast(App, raw_result)
@@ -98,6 +267,46 @@ class AsyncApps:
     async def delete(self, app: str) -> None:
         """Delete an app by its ID or slug."""
         await self._client.delete(f"/api/v2/apps/{app}")
+
+    async def logs(
+        self,
+        app: str,
+        *,
+        start: str,
+        end: Optional[str] = None,
+        revision_id: Optional[str] = None,
+        level: Optional[Literal["debug", "info", "warn", "error"]] = None,
+        query: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> RuntimeLogsResponse:
+        """Query historical runtime logs for an app.
+
+        Args:
+            app: The app ID or slug.
+            start: Start of the time range (ISO 8601).
+            end: End of the time range (ISO 8601). Defaults to now.
+            revision_id: Filter logs by revision ID.
+            level: Minimum log severity level.
+            query: Full-text search query.
+            cursor: The pagination cursor.
+            limit: The maximum number of items to return.
+        """
+        params: dict[str, Any] = {"start": start}
+        if end is not None:
+            params["end"] = end
+        if revision_id is not None:
+            params["revision_id"] = revision_id
+        if level is not None:
+            params["level"] = level
+        if query is not None:
+            params["query"] = query
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        result = await self._client.get(f"/api/v2/apps/{app}/logs", params)
+        return cast(RuntimeLogsResponse, convert_to_snake_case(result))
 
 
 class Apps:
@@ -115,42 +324,87 @@ class Apps:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> PaginatedList[App]:
+    ) -> PaginatedList[AppListItem]:
         """List apps of an org.
 
         Args:
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
         """
-        paginated = self._bridge.run(self._async.list(cursor=cursor, limit=limit))
+        paginated = self._bridge.run(
+            self._async.list(cursor=cursor, limit=limit)
+        )
         return PaginatedList(self._bridge, paginated)
 
     def create(
         self,
         *,
         slug: Optional[str] = None,
+        env_vars: Optional[list[EnvVarInput]] = None,
+        config: Optional[Config] = None,
     ) -> App:
         """Create a new app.
 
         Args:
             slug: Human readable identifier for the app.
+            env_vars: App-specific environment variables.
+            config: Default build and runtime configuration.
         """
-        return self._bridge.run(self._async.create(slug=slug))
+        return self._bridge.run(
+            self._async.create(slug=slug, env_vars=env_vars, config=config)
+        )
 
     def update(
         self,
         app: str,
         *,
         slug: Optional[str] = None,
+        env_vars: Optional[list[EnvVarUpdate]] = None,
+        config: Optional[Config] = None,
     ) -> App:
         """Update an existing app.
 
         Args:
             app: The app ID or slug to update.
             slug: Human readable identifier for the app.
+            env_vars: Deep merge with existing environment variables.
+            config: Replace the entire deploy config.
         """
-        return self._bridge.run(self._async.update(app, slug=slug))
+        return self._bridge.run(
+            self._async.update(app, slug=slug, env_vars=env_vars, config=config)
+        )
 
     def delete(self, app: str) -> None:
         """Delete an app by its ID or slug."""
         self._bridge.run(self._async.delete(app))
+
+    def logs(
+        self,
+        app: str,
+        *,
+        start: str,
+        end: Optional[str] = None,
+        revision_id: Optional[str] = None,
+        level: Optional[Literal["debug", "info", "warn", "error"]] = None,
+        query: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> RuntimeLogsResponse:
+        """Query historical runtime logs for an app.
+
+        Args:
+            app: The app ID or slug.
+            start: Start of the time range (ISO 8601).
+            end: End of the time range (ISO 8601). Defaults to now.
+            revision_id: Filter logs by revision ID.
+            level: Minimum log severity level.
+            query: Full-text search query.
+            cursor: The pagination cursor.
+            limit: The maximum number of items to return.
+        """
+        return self._bridge.run(
+            self._async.logs(
+                app, start=start, end=end, revision_id=revision_id,
+                level=level, query=query, cursor=cursor, limit=limit,
+            )
+        )

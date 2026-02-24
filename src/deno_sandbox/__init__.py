@@ -1,7 +1,20 @@
 from typing import Optional
 
-from .apps import Apps, AsyncApps
-from .revisions import Revisions, AsyncRevisions
+from .apps import (
+    Apps,
+    AsyncApps,
+    App,
+    AppListItem,
+    Config,
+    EnvVar,
+    EnvVarInput,
+    EnvVarUpdate,
+    LayerRef,
+    Runtime,
+    RuntimeLog,
+    RuntimeLogsResponse,
+)
+from .revisions import Revisions, AsyncRevisions, Revision, RevisionListItem
 from .snapshots import Snapshots, AsyncSnapshots
 from .timelines import Timelines, AsyncTimelines
 from .volumes import Volumes, AsyncVolumes
@@ -13,7 +26,23 @@ from .sandbox import (
 from .console import AsyncConsoleClient
 from .options import Options, get_internal_options
 
-__all__ = ["DenoDeploy", "AsyncDenoDeploy", "Options"]
+__all__ = [
+    "DenoDeploy",
+    "AsyncDenoDeploy",
+    "Options",
+    "App",
+    "AppListItem",
+    "Config",
+    "EnvVar",
+    "EnvVarInput",
+    "EnvVarUpdate",
+    "LayerRef",
+    "Runtime",
+    "RuntimeLog",
+    "RuntimeLogsResponse",
+    "Revision",
+    "RevisionListItem",
+]
 
 
 class DenoDeploy:

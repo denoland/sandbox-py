@@ -3,7 +3,7 @@ import pytest
 from deno_sandbox import AsyncDenoDeploy, DenoDeploy
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 async def async_shared_sandbox():
     sdk = AsyncDenoDeploy()
 
@@ -11,7 +11,7 @@ async def async_shared_sandbox():
         yield sandbox
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def shared_sandbox():
     sdk = DenoDeploy()
 

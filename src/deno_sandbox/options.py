@@ -9,6 +9,9 @@ from httpx import URL
 
 from .errors import MissingApiToken
 
+DEFAULT_SANDBOX_BASE_DOMAIN = "sandbox-api.deno.net"
+DEFAULT_REGION = "ord"
+
 
 class Options(TypedDict):
     token: NotRequired[str | None]
@@ -21,12 +24,37 @@ class InternalOptions(TypedDict):
     console_url: URL
     token: str
     regions: list[str]
+    sandbox_base_domain: str | None
+
+
+def get_sandbox_ws_url(options: InternalOptions, region: str | None = None) -> URL:
+    """Build a region-specific sandbox WebSocket URL.
+
+    If the user set DENO_SANDBOX_ENDPOINT, that endpoint is always used
+    (region is ignored for URL construction). Otherwise the URL is built
+    from the base domain and the requested region.
+    """
+    base_domain = options["sandbox_base_domain"]
+    if base_domain is None:
+        # User provided an explicit endpoint — use it as-is.
+        return options["sandbox_ws_url"]
+
+    resolved_region = region if region is not None else DEFAULT_REGION
+    return URL(f"wss://{resolved_region}.{base_domain}")
 
 
 def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
-    sandbox_url = URL(
-        os.environ.get("DENO_SANDBOX_ENDPOINT", "https://ams.sandbox-api.deno.net")
-    )
+    explicit_endpoint = os.environ.get("DENO_SANDBOX_ENDPOINT")
+
+    if explicit_endpoint is not None:
+        sandbox_url = URL(explicit_endpoint)
+        sandbox_base_domain: str | None = None
+    else:
+        base_domain = os.environ.get(
+            "DENO_SANDBOX_BASE_DOMAIN", DEFAULT_SANDBOX_BASE_DOMAIN
+        )
+        sandbox_url = URL(f"https://{DEFAULT_REGION}.{base_domain}")
+        sandbox_base_domain = base_domain
 
     token = (
         options is not None
@@ -56,4 +84,5 @@ def get_internal_options(options: Optional[Options] = None) -> InternalOptions:
         sandbox_url=sandbox_url,
         token=token,
         regions=regions,
+        sandbox_base_domain=sandbox_base_domain,
     )

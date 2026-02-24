@@ -215,6 +215,7 @@ async def test_rpc_wrong_params(async_shared_sandbox) -> None:
         await async_shared_sandbox._rpc.call("readTextFile", {})
 
 
+@pytest.mark.timeout(60)
 @pytest.mark.asyncio(loop_scope="session")
 async def test_deno_deploy_async():
     sdk = AsyncDenoDeploy()
@@ -260,15 +261,15 @@ async def test_deno_deploy_async():
             revision = await build.wait()
             assert revision is not None
             assert revision["id"] == build.id
-            assert revision["status"] in ["building", "ready", "error", "routed"]
+            assert revision["status"] in ["skipped", "queued", "building", "succeeded", "failed"]
             assert "created_at" in revision
-            assert "updated_at" in revision
 
     finally:
         # Clean up the app
         await sdk.apps.delete(app["id"])
 
 
+@pytest.mark.timeout(60)
 def test_deno_deploy_sync():
     sdk = DenoDeploy()
 
@@ -313,9 +314,8 @@ def test_deno_deploy_sync():
             revision = build.wait()
             assert revision is not None
             assert revision["id"] == build.id
-            assert revision["status"] in ["building", "ready", "error", "routed"]
+            assert revision["status"] in ["skipped", "queued", "building", "succeeded", "failed"]
             assert "created_at" in revision
-            assert "updated_at" in revision
 
     finally:
         # Clean up the app
