@@ -146,11 +146,11 @@ async def test_revisions_get_deprecated_two_arg_async():
 
 @pytest.mark.timeout(60)
 @pytest.mark.asyncio(loop_scope="session")
-async def test_revisions_create_async():
+async def test_revisions_deploy_async():
     sdk = AsyncDenoDeploy()
     app = await sdk.apps.create()
     try:
-        revision = await sdk.revisions.create(
+        revision = await sdk.revisions.deploy(
             app["id"],
             assets={
                 "main.ts": {
@@ -170,11 +170,11 @@ async def test_revisions_create_async():
 
 
 @pytest.mark.timeout(60)
-def test_revisions_create_sync():
+def test_revisions_deploy_sync():
     sdk = DenoDeploy()
     app = sdk.apps.create()
     try:
-        revision = sdk.revisions.create(
+        revision = sdk.revisions.deploy(
             app["id"],
             assets={
                 "main.ts": {

@@ -173,7 +173,7 @@ class AsyncRevisions:
         result = await self._client.post(f"/api/v2/revisions/{revision}/cancel", {})
         return cast(Revision, convert_to_snake_case(result))
 
-    async def create(
+    async def deploy(
         self,
         app: str,
         assets: Dict[str, Asset],
@@ -182,7 +182,7 @@ class AsyncRevisions:
         env_vars: Optional[list[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
     ) -> Revision:
-        """Create a revision by uploading source files as assets.
+        """Deploy a revision by uploading source files as assets.
 
         Args:
             app: The app ID or slug.
@@ -254,7 +254,7 @@ class Revisions:
         """
         return self._bridge.run(self._async.cancel(revision))
 
-    def create(
+    def deploy(
         self,
         app: str,
         assets: Dict[str, Asset],
@@ -263,7 +263,7 @@ class Revisions:
         env_vars: Optional[list[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
     ) -> Revision:
-        """Create a revision by uploading source files as assets.
+        """Deploy a revision by uploading source files as assets.
 
         Args:
             app: The app ID or slug.
@@ -276,7 +276,7 @@ class Revisions:
             The created Revision (build is async; poll for status).
         """
         return self._bridge.run(
-            self._async.create(
+            self._async.deploy(
                 app, assets, config=config, env_vars=env_vars, labels=labels
             )
         )
