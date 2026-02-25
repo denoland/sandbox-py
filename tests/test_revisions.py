@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import pytest
 import uuid
 import warnings
@@ -158,12 +161,10 @@ async def test_revisions_create_async():
             },
         )
         assert revision["id"] is not None
-        assert revision["status"] in [
-            "queued",
-            "building",
-            "succeeded",
-            "failed",
-        ]
+        while revision["status"] in ("queued", "building"):
+            await asyncio.sleep(1)
+            revision = await sdk.revisions.get(revision["id"])
+        assert revision["status"] == "succeeded", revision.get("failure_reason")
     finally:
         await sdk.apps.delete(app["id"])
 
@@ -184,11 +185,9 @@ def test_revisions_create_sync():
             },
         )
         assert revision["id"] is not None
-        assert revision["status"] in [
-            "queued",
-            "building",
-            "succeeded",
-            "failed",
-        ]
+        while revision["status"] in ("queued", "building"):
+            time.sleep(1)
+            revision = sdk.revisions.get(revision["id"])
+        assert revision["status"] == "succeeded", revision.get("failure_reason")
     finally:
         sdk.apps.delete(app["id"])
