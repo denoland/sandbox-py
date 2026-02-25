@@ -139,3 +139,56 @@ async def test_revisions_get_deprecated_two_arg_async():
         assert fetched["id"] == revision["id"]
     finally:
         await sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_create_async():
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revision = await sdk.revisions.create(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+        assert revision["id"] is not None
+        assert revision["status"] in [
+            "queued",
+            "building",
+            "succeeded",
+            "failed",
+        ]
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(60)
+def test_revisions_create_sync():
+    sdk = DenoDeploy()
+    app = sdk.apps.create()
+    try:
+        revision = sdk.revisions.create(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+        assert revision["id"] is not None
+        assert revision["status"] in [
+            "queued",
+            "building",
+            "succeeded",
+            "failed",
+        ]
+    finally:
+        sdk.apps.delete(app["id"])
