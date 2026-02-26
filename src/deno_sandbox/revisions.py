@@ -6,6 +6,14 @@ from typing_extensions import Literal, NotRequired, Optional
 
 from deno_sandbox.apps import Config, EnvVar, LayerRef
 
+from .bridge import AsyncBridge
+from .console import (
+    AsyncConsoleClient,
+    AsyncPaginatedList,
+    PaginatedList,
+)
+from .utils import convert_to_snake_case
+
 
 class FileAsset(TypedDict):
     kind: Literal["file"]
@@ -24,15 +32,6 @@ Asset = Union[FileAsset, SymlinkAsset]
 class EnvVarInputForDeploy(TypedDict):
     key: str
     value: str
-
-
-from .bridge import AsyncBridge
-from .console import (
-    AsyncConsoleClient,
-    AsyncPaginatedList,
-    PaginatedList,
-)
-from .utils import convert_to_snake_case
 
 
 class RevisionListItem(TypedDict):
