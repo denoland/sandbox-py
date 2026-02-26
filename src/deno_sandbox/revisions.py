@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, TypedDict, Union, cast, overload
+from typing import Any, Dict, List, TypedDict, Union, cast, overload
 from typing_extensions import Literal, NotRequired, Optional
 
 from deno_sandbox.apps import Config, EnvVar, LayerRef
@@ -179,7 +179,7 @@ class AsyncRevisions:
         assets: Dict[str, Asset],
         *,
         config: Optional[Config] = None,
-        env_vars: Optional[list[EnvVarInputForDeploy]] = None,
+        env_vars: Optional[List[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
@@ -260,7 +260,7 @@ class Revisions:
         assets: Dict[str, Asset],
         *,
         config: Optional[Config] = None,
-        env_vars: Optional[list[EnvVarInputForDeploy]] = None,
+        env_vars: Optional[List[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.

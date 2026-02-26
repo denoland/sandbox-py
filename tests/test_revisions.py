@@ -164,6 +164,7 @@ async def test_revisions_deploy_async():
         while revision["status"] in ("queued", "building"):
             await asyncio.sleep(1)
             revision = await sdk.revisions.get(revision["id"])
+            assert revision is not None
         assert revision["status"] == "succeeded", revision.get("failure_reason")
     finally:
         await sdk.apps.delete(app["id"])
@@ -188,6 +189,7 @@ def test_revisions_deploy_sync():
         while revision["status"] in ("queued", "building"):
             time.sleep(1)
             revision = sdk.revisions.get(revision["id"])
+            assert revision is not None
         assert revision["status"] == "succeeded", revision.get("failure_reason")
     finally:
         sdk.apps.delete(app["id"])
