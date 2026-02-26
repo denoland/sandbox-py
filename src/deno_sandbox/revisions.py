@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, TypedDict, cast, overload
+from typing import Any, Dict, List, TypedDict, Union, cast, overload
 from typing_extensions import Literal, NotRequired, Optional
 
 from deno_sandbox.apps import Config, EnvVar, LayerRef
@@ -13,6 +13,25 @@ from .console import (
     PaginatedList,
 )
 from .utils import convert_to_snake_case
+
+
+class FileAsset(TypedDict):
+    kind: Literal["file"]
+    encoding: Literal["utf-8", "base64"]
+    content: str
+
+
+class SymlinkAsset(TypedDict):
+    kind: Literal["symlink"]
+    target: str
+
+
+Asset = Union[FileAsset, SymlinkAsset]
+
+
+class EnvVarInputForDeploy(TypedDict):
+    key: str
+    value: str
 
 
 class RevisionListItem(TypedDict):
@@ -154,6 +173,37 @@ class AsyncRevisions:
         result = await self._client.post(f"/api/v2/revisions/{revision}/cancel", {})
         return cast(Revision, convert_to_snake_case(result))
 
+    async def deploy(
+        self,
+        app: str,
+        assets: Dict[str, Asset],
+        *,
+        config: Optional[Config] = None,
+        env_vars: Optional[List[EnvVarInputForDeploy]] = None,
+        labels: Optional[Dict[str, str]] = None,
+    ) -> Revision:
+        """Deploy a revision by uploading source files as assets.
+
+        Args:
+            app: The app ID or slug.
+            assets: Dict mapping file paths to Asset objects.
+            config: Optional build/runtime configuration.
+            env_vars: Optional environment variables for this revision.
+            labels: Optional labels (e.g., git metadata).
+
+        Returns:
+            The created Revision (build is async; poll for status).
+        """
+        body: Dict[str, Any] = {"assets": assets}
+        if config is not None:
+            body["config"] = config
+        if env_vars is not None:
+            body["env_vars"] = env_vars
+        if labels is not None:
+            body["labels"] = labels
+        result = await self._client.post(f"/api/v2/apps/{app}/deploy", body)
+        return cast(Revision, convert_to_snake_case(result))
+
 
 class Revisions:
     def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
@@ -203,3 +253,30 @@ class Revisions:
             revision: The revision ID.
         """
         return self._bridge.run(self._async.cancel(revision))
+
+    def deploy(
+        self,
+        app: str,
+        assets: Dict[str, Asset],
+        *,
+        config: Optional[Config] = None,
+        env_vars: Optional[List[EnvVarInputForDeploy]] = None,
+        labels: Optional[Dict[str, str]] = None,
+    ) -> Revision:
+        """Deploy a revision by uploading source files as assets.
+
+        Args:
+            app: The app ID or slug.
+            assets: Dict mapping file paths to Asset objects.
+            config: Optional build/runtime configuration.
+            env_vars: Optional environment variables for this revision.
+            labels: Optional labels (e.g., git metadata).
+
+        Returns:
+            The created Revision (build is async; poll for status).
+        """
+        return self._bridge.run(
+            self._async.deploy(
+                app, assets, config=config, env_vars=env_vars, labels=labels
+            )
+        )

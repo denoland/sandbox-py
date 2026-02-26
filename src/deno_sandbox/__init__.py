@@ -14,7 +14,16 @@ from .apps import (
     RuntimeLog,
     RuntimeLogsResponse,
 )
-from .revisions import Revisions, AsyncRevisions, Revision, RevisionListItem
+from .revisions import (
+    Revisions,
+    AsyncRevisions,
+    Revision,
+    RevisionListItem,
+    FileAsset,
+    SymlinkAsset,
+    Asset,
+    EnvVarInputForDeploy,
+)
 from .snapshots import Snapshots, AsyncSnapshots
 from .timelines import Timelines, AsyncTimelines
 from .volumes import Volumes, AsyncVolumes
@@ -42,6 +51,10 @@ __all__ = [
     "RuntimeLogsResponse",
     "Revision",
     "RevisionListItem",
+    "FileAsset",
+    "SymlinkAsset",
+    "Asset",
+    "EnvVarInputForDeploy",
 ]
 
 
