@@ -24,6 +24,12 @@ from .revisions import (
     Asset,
     EnvVarInputForDeploy,
 )
+from .layers import (
+    Layers,
+    AsyncLayers,
+    Layer,
+    LayerAppRef,
+)
 from .snapshots import Snapshots, AsyncSnapshots
 from .timelines import Timelines, AsyncTimelines
 from .volumes import Volumes, AsyncVolumes
@@ -55,6 +61,8 @@ __all__ = [
     "SymlinkAsset",
     "Asset",
     "EnvVarInputForDeploy",
+    "Layer",
+    "LayerAppRef",
 ]
 
 
@@ -66,6 +74,7 @@ class DenoDeploy:
         client = AsyncConsoleClient(internal_options)
         self.apps = Apps(client, bridge)
         self.revisions = Revisions(client, bridge)
+        self.layers = Layers(client, bridge)
         self.timelines = Timelines(client, bridge)
         self.sandbox = SandboxApi(client, bridge)
         self.snapshots = Snapshots(client, bridge)
@@ -79,6 +88,7 @@ class AsyncDenoDeploy:
 
         self.apps = AsyncApps(client)
         self.revisions = AsyncRevisions(client)
+        self.layers = AsyncLayers(client)
         self.timelines = AsyncTimelines(client)
         self.sandbox = AsyncSandboxApi(client)
         self.snapshots = AsyncSnapshots(client)
