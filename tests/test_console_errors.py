@@ -75,7 +75,10 @@ async def test_error_includes_trace_id():
     assert err.code == "APP_NOT_FOUND"
     assert err.message == "App does not exist"
     assert err.trace_id == "abc-123-def"
-    assert str(err) == "App does not exist (status: 404, code: APP_NOT_FOUND, traceId: abc-123-def)"
+    assert (
+        str(err)
+        == "App does not exist (status: 404, code: APP_NOT_FOUND, traceId: abc-123-def)"
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
