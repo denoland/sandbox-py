@@ -224,6 +224,7 @@ class AsyncApps:
         self,
         *,
         slug: Optional[str] = None,
+        layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInput]] = None,
         config: Optional[Config] = None,
     ) -> App:
@@ -231,12 +232,15 @@ class AsyncApps:
 
         Args:
             slug: Human readable identifier for the app.
+            layers: Layer IDs or slugs to reference.
             env_vars: App-specific environment variables.
             config: Default build and runtime configuration.
         """
         options: dict[str, Any] = {}
         if slug is not None:
             options["slug"] = slug
+        if layers is not None:
+            options["layers"] = layers
         if env_vars is not None:
             options["env_vars"] = env_vars
         if config is not None:
@@ -250,6 +254,7 @@ class AsyncApps:
         app: str,
         *,
         slug: Optional[str] = None,
+        layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarUpdate]] = None,
         config: Optional[Config] = None,
     ) -> App:
@@ -258,12 +263,15 @@ class AsyncApps:
         Args:
             app: The app ID or slug to update.
             slug: Human readable identifier for the app.
+            layers: Replace all layer references.
             env_vars: Deep merge with existing environment variables.
             config: Replace the entire deploy config.
         """
         update: dict[str, Any] = {}
         if slug is not None:
             update["slug"] = slug
+        if layers is not None:
+            update["layers"] = layers
         if env_vars is not None:
             update["env_vars"] = env_vars
         if config is not None:
@@ -346,6 +354,7 @@ class Apps:
         self,
         *,
         slug: Optional[str] = None,
+        layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInput]] = None,
         config: Optional[Config] = None,
     ) -> App:
@@ -353,11 +362,14 @@ class Apps:
 
         Args:
             slug: Human readable identifier for the app.
+            layers: Layer IDs or slugs to reference.
             env_vars: App-specific environment variables.
             config: Default build and runtime configuration.
         """
         return self._bridge.run(
-            self._async.create(slug=slug, env_vars=env_vars, config=config)
+            self._async.create(
+                slug=slug, layers=layers, env_vars=env_vars, config=config
+            )
         )
 
     def update(
@@ -365,6 +377,7 @@ class Apps:
         app: str,
         *,
         slug: Optional[str] = None,
+        layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarUpdate]] = None,
         config: Optional[Config] = None,
     ) -> App:
@@ -373,11 +386,14 @@ class Apps:
         Args:
             app: The app ID or slug to update.
             slug: Human readable identifier for the app.
+            layers: Replace all layer references.
             env_vars: Deep merge with existing environment variables.
             config: Replace the entire deploy config.
         """
         return self._bridge.run(
-            self._async.update(app, slug=slug, env_vars=env_vars, config=config)
+            self._async.update(
+                app, slug=slug, layers=layers, env_vars=env_vars, config=config
+            )
         )
 
     def delete(self, app: str) -> None:
