@@ -13,6 +13,7 @@ from typing import (
 import httpx
 
 from .bridge import AsyncBridge
+from .errors import HTTPStatusError
 from .options import InternalOptions
 from .utils import convert_to_snake_case, parse_link_header
 
@@ -141,7 +142,23 @@ class AsyncConsoleClient:
             method=method, url=url, json=data, timeout=10.0
         )
 
-        response.raise_for_status()
+        if not response.is_success:
+            code = "UNKNOWN_ERROR"
+            message = f"Request to {url} failed with status {response.status_code}"
+            trace_id = response.headers.get("x-deno-trace-id")
+            try:
+                body = response.json()
+                if (
+                    isinstance(body, dict)
+                    and isinstance(body.get("code"), str)
+                    and isinstance(body.get("message"), str)
+                ):
+                    code = body["code"]
+                    message = body["message"]
+            except Exception:
+                pass
+            raise HTTPStatusError(response.status_code, message, code, trace_id)
+
         return response
 
     async def post(self, path: str, data: Any) -> dict:
@@ -170,8 +187,8 @@ class AsyncConsoleClient:
     ) -> dict | None:
         try:
             return await self.get(path, params)
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
+        except HTTPStatusError as e:
+            if e.status_code == 404:
                 return None
             raise
 
