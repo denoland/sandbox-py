@@ -39,6 +39,7 @@ from .sandbox import (
     SandboxApi,
 )
 from .console import AsyncConsoleClient
+from .errors import HTTPStatusError
 from .options import Options, get_internal_options
 
 __all__ = [
@@ -63,6 +64,7 @@ __all__ = [
     "EnvVarInputForDeploy",
     "Layer",
     "LayerAppRef",
+    "HTTPStatusError",
 ]
 
 

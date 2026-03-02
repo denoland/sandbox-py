@@ -28,10 +28,22 @@ class ProcessAlreadyExited(Exception):
 class HTTPStatusError(Exception):
     """Raised when an HTTP request returns a non-success status code."""
 
-    def __init__(self, status_code: int, message: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        message: str,
+        code: str = "UNKNOWN_ERROR",
+        trace_id: str | None = None,
+    ) -> None:
         self.status_code = status_code
         self.message = message
-        super().__init__(f"HTTP Status {status_code}: {message}")
+        self.code = code
+        self.trace_id = trace_id
+
+        detail = f"status: {status_code}, code: {code}"
+        if trace_id:
+            detail += f", traceId: {trace_id}"
+        super().__init__(f"{message} ({detail})")
 
 
 class ZodErrorRaw(TypedDict):
