@@ -179,6 +179,7 @@ class AsyncRevisions:
         assets: Dict[str, Asset],
         *,
         config: Optional[Config] = None,
+        layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
     ) -> Revision:
@@ -188,6 +189,7 @@ class AsyncRevisions:
             app: The app ID or slug.
             assets: Dict mapping file paths to Asset objects.
             config: Optional build/runtime configuration.
+            layers: Layer IDs or slugs to reference for this revision.
             env_vars: Optional environment variables for this revision.
             labels: Optional labels (e.g., git metadata).
 
@@ -197,6 +199,8 @@ class AsyncRevisions:
         body: Dict[str, Any] = {"assets": assets}
         if config is not None:
             body["config"] = config
+        if layers is not None:
+            body["layers"] = layers
         if env_vars is not None:
             body["env_vars"] = env_vars
         if labels is not None:
@@ -260,6 +264,7 @@ class Revisions:
         assets: Dict[str, Asset],
         *,
         config: Optional[Config] = None,
+        layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
     ) -> Revision:
@@ -269,6 +274,7 @@ class Revisions:
             app: The app ID or slug.
             assets: Dict mapping file paths to Asset objects.
             config: Optional build/runtime configuration.
+            layers: Layer IDs or slugs to reference for this revision.
             env_vars: Optional environment variables for this revision.
             labels: Optional labels (e.g., git metadata).
 
@@ -277,6 +283,11 @@ class Revisions:
         """
         return self._bridge.run(
             self._async.deploy(
-                app, assets, config=config, env_vars=env_vars, labels=labels
+                app,
+                assets,
+                config=config,
+                layers=layers,
+                env_vars=env_vars,
+                labels=labels,
             )
         )
