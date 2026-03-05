@@ -227,13 +227,13 @@ async def test_revisions_deploy_preview_only_async():
         )
         production = [
             t for t in timelines
-            if t["context"]["slug"] == "production"
-            and t.get("active_revision", {}).get("id") == revision["id"]
+            if t["slug"] == "production"
+            and not t.get("partition", {}).get("deno.revision.id")
         ]
         preview = [
             t for t in timelines
-            if t["context"]["slug"] == "preview"
-            and t.get("active_revision", {}).get("id") == revision["id"]
+            if t["slug"] == "preview"
+            and t.get("partition", {}).get("deno.revision.id") == revision["id"]
         ]
         assert len(production) == 0, "should not be on production timeline"
         assert len(preview) > 0, "should be on preview timeline"
