@@ -195,9 +195,10 @@ def test_revisions_deploy_sync():
         sdk.apps.delete(app["id"])
 
 
-@pytest.mark.timeout(60)
+@pytest.mark.timeout(120)
 @pytest.mark.asyncio(loop_scope="session")
 async def test_revisions_deploy_preview_only_async():
+    """Deploy with production=False, preview=True and verify timeline assignment."""
     sdk = AsyncDenoDeploy()
     app = await sdk.apps.create()
     try:
@@ -219,5 +220,22 @@ async def test_revisions_deploy_preview_only_async():
             revision = await sdk.revisions.get(revision["id"])
             assert revision is not None
         assert revision["status"] == "succeeded", revision.get("failure_reason")
+
+        # Verify timeline assignment via the revision timelines API
+        timelines = await sdk.revisions._client.get(
+            f"/api/v2/revisions/{revision['id']}/timelines"
+        )
+        production = [
+            t for t in timelines
+            if t["context"]["slug"] == "production"
+            and t.get("active_revision", {}).get("id") == revision["id"]
+        ]
+        preview = [
+            t for t in timelines
+            if t["context"]["slug"] == "preview"
+            and t.get("active_revision", {}).get("id") == revision["id"]
+        ]
+        assert len(production) == 0, "should not be on production timeline"
+        assert len(preview) > 0, "should be on preview timeline"
     finally:
         await sdk.apps.delete(app["id"])
