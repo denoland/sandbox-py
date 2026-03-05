@@ -193,3 +193,31 @@ def test_revisions_deploy_sync():
         assert revision["status"] == "succeeded", revision.get("failure_reason")
     finally:
         sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_deploy_preview_only_async():
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revision = await sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+            production=False,
+            preview=True,
+        )
+        assert revision["id"] is not None
+        while revision["status"] in ("queued", "building"):
+            await asyncio.sleep(1)
+            revision = await sdk.revisions.get(revision["id"])
+            assert revision is not None
+        assert revision["status"] == "succeeded", revision.get("failure_reason")
+    finally:
+        await sdk.apps.delete(app["id"])
