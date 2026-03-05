@@ -226,12 +226,14 @@ async def test_revisions_deploy_preview_only_async():
             f"/api/v2/revisions/{revision['id']}/timelines"
         )
         production = [
-            t for t in timelines
+            t
+            for t in timelines
             if t["slug"] == "production"
             and not t.get("partition", {}).get("deno.revision.id")
         ]
         preview = [
-            t for t in timelines
+            t
+            for t in timelines
             if t["slug"] == "preview"
             and t.get("partition", {}).get("deno.revision.id") == revision["id"]
         ]
