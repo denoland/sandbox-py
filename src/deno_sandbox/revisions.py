@@ -182,6 +182,8 @@ class AsyncRevisions:
         layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
+        production: Optional[bool] = None,
+        preview: Optional[bool] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
 
@@ -192,6 +194,10 @@ class AsyncRevisions:
             layers: Layer IDs or slugs to reference for this revision.
             env_vars: Optional environment variables for this revision.
             labels: Optional labels (e.g., git metadata).
+            production: Whether to deploy to the production timeline.
+                Defaults to true on the server.
+            preview: Whether to deploy as a preview deployment.
+                Defaults to false on the server.
 
         Returns:
             The created Revision (build is async; poll for status).
@@ -205,6 +211,10 @@ class AsyncRevisions:
             body["env_vars"] = env_vars
         if labels is not None:
             body["labels"] = labels
+        if production is not None:
+            body["production"] = production
+        if preview is not None:
+            body["preview"] = preview
         result = await self._client.post(f"/api/v2/apps/{app}/deploy", body)
         return cast(Revision, convert_to_snake_case(result))
 
@@ -267,6 +277,8 @@ class Revisions:
         layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInputForDeploy]] = None,
         labels: Optional[Dict[str, str]] = None,
+        production: Optional[bool] = None,
+        preview: Optional[bool] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
 
@@ -277,6 +289,10 @@ class Revisions:
             layers: Layer IDs or slugs to reference for this revision.
             env_vars: Optional environment variables for this revision.
             labels: Optional labels (e.g., git metadata).
+            production: Whether to deploy to the production timeline.
+                Defaults to true on the server.
+            preview: Whether to deploy as a preview deployment.
+                Defaults to false on the server.
 
         Returns:
             The created Revision (build is async; poll for status).
@@ -289,5 +305,7 @@ class Revisions:
                 layers=layers,
                 env_vars=env_vars,
                 labels=labels,
+                production=production,
+                preview=preview,
             )
         )
