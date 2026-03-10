@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, List, TypedDict, Union, cast, overload
+from typing import Any, AsyncIterator, Dict, Iterator, List, TypedDict, Union, cast, overload
 from typing_extensions import Literal, NotRequired, Optional
 
 from deno_sandbox.apps import Config, EnvVar, LayerRef
@@ -89,6 +89,39 @@ class Revision(TypedDict):
     """ISO 8601 timestamp of deletion, or null if active."""
 
 
+ProgressStageStatus = Literal[
+    "pending", "running", "succeeded", "skipped", "failed", "timed_out", "cancelled", "errored"
+]
+
+
+class ProgressStage(TypedDict):
+    status: ProgressStageStatus
+    """The current status of this stage."""
+
+    start: NotRequired[str | None]
+    """ISO 8601 timestamp when the stage started, or null."""
+
+    end: NotRequired[str | None]
+    """ISO 8601 timestamp when the stage ended, or null."""
+
+
+class RevisionProgress(TypedDict):
+    queued: NotRequired[ProgressStage]
+    """Queue stage status."""
+
+    preparing: NotRequired[ProgressStage]
+    """Preparation stage status."""
+
+    installing: NotRequired[ProgressStage]
+    """Dependency installation stage status."""
+
+    building: NotRequired[ProgressStage]
+    """Build command execution stage status."""
+
+    deploying: NotRequired[ProgressStage]
+    """Artifact upload and routing stage status."""
+
+
 # Keep old name as alias for backward compatibility
 RevisionWithoutTimelines = RevisionListItem
 
@@ -172,6 +205,21 @@ class AsyncRevisions:
         """
         result = await self._client.post(f"/api/v2/revisions/{revision}/cancel", {})
         return cast(Revision, convert_to_snake_case(result))
+
+    async def progress(self, revision: str) -> AsyncIterator[RevisionProgress]:
+        """Stream revision build progress.
+
+        Yields RevisionProgress events as the revision progresses through
+        its build stages. The stream ends when the revision reaches a
+        terminal state (succeeded, failed, or skipped).
+
+        Args:
+            revision: The revision ID.
+        """
+        async for event in self._client.stream_ndjson(
+            f"/api/v2/revisions/{revision}/progress"
+        ):
+            yield cast(RevisionProgress, convert_to_snake_case(event))
 
     async def deploy(
         self,
@@ -267,6 +315,22 @@ class Revisions:
             revision: The revision ID.
         """
         return self._bridge.run(self._async.cancel(revision))
+
+    def progress(self, revision: str) -> Iterator[RevisionProgress]:
+        """Stream revision build progress.
+
+        Yields RevisionProgress events as the revision progresses through
+        its build stages. The stream ends when the revision reaches a
+        terminal state (succeeded, failed, or skipped).
+
+        Args:
+            revision: The revision ID.
+        """
+
+        async def _collect() -> list[RevisionProgress]:
+            return [event async for event in self._async.progress(revision)]
+
+        return iter(self._bridge.run(_collect()))
 
     def deploy(
         self,
