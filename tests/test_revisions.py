@@ -302,7 +302,7 @@ async def test_revisions_progress_async():
             },
         )
 
-        events: list[dict] = []
+        events = []
         async for event in sdk.revisions.progress(revision["id"]):
             events.append(event)
 
@@ -328,7 +328,7 @@ def test_revisions_progress_sync():
             },
         )
 
-        events: list[dict] = list(sdk.revisions.progress(revision["id"]))
+        events = list(sdk.revisions.progress(revision["id"]))
 
         _assert_progress_events(events)
     finally:
