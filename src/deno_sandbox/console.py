@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from typing_extensions import NotRequired
 from typing import (
     Any,
+    AsyncIterator,
     Generic,
     Literal,
     Optional,
@@ -225,6 +227,43 @@ class AsyncConsoleClient:
         items = [cast(T, convert_to_snake_case(item)) for item in data]
 
         return AsyncPaginatedList(self, items, path, next_cursor, params)
+
+    async def stream_ndjson(self, path: str) -> AsyncIterator[dict]:
+        """Stream NDJSON responses line by line.
+
+        Yields parsed JSON objects for each line in the response.
+        """
+        req_url = self._options["console_url"].join(path)
+        headers = {
+            "Accept": "application/x-ndjson",
+        }
+        async with self.client.stream(
+            "GET", req_url, headers=headers, timeout=None
+        ) as response:
+            if not response.is_success:
+                await response.aread()
+                code = "UNKNOWN_ERROR"
+                message = (
+                    f"Request to {req_url} failed with status {response.status_code}"
+                )
+                trace_id = response.headers.get("x-deno-trace-id")
+                try:
+                    body = response.json()
+                    if (
+                        isinstance(body, dict)
+                        and isinstance(body.get("code"), str)
+                        and isinstance(body.get("message"), str)
+                    ):
+                        code = body["code"]
+                        message = body["message"]
+                except Exception:
+                    pass
+                raise HTTPStatusError(response.status_code, message, code, trace_id)
+
+            async for line in response.aiter_lines():
+                line = line.strip()
+                if line:
+                    yield json.loads(line)
 
     async def close(self) -> None:
         await self.client.aclose()

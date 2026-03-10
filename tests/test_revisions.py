@@ -241,3 +241,95 @@ async def test_revisions_deploy_preview_only_async():
         assert len(preview) > 0, "should be on preview timeline"
     finally:
         await sdk.apps.delete(app["id"])
+
+
+VALID_STAGE_STATUSES = {
+    "pending",
+    "running",
+    "succeeded",
+    "skipped",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "errored",
+}
+
+
+def _assert_progress_events(events: list[dict]) -> None:
+    """Shared assertions for progress event lists."""
+    assert len(events) > 0, "Expected at least one progress event"
+
+    for event in events:
+        assert isinstance(event, dict)
+        # Each event should have at least one known stage key
+        stage_keys = {"queued", "preparing", "installing", "building", "deploying"}
+        found_keys = stage_keys & event.keys()
+        assert len(found_keys) > 0, f"No known stage keys in event: {event}"
+
+        for key in found_keys:
+            stage = event[key]
+            assert "status" in stage, f"Stage {key} missing 'status'"
+            assert stage["status"] in VALID_STAGE_STATUSES, (
+                f"Stage {key} has unexpected status: {stage['status']}"
+            )
+
+    # The last event should have at least one stage in a terminal state
+    last = events[-1]
+    terminal_statuses = {"succeeded", "failed", "skipped"}
+    has_terminal = any(
+        last.get(k, {}).get("status") in terminal_statuses
+        for k in ("queued", "preparing", "installing", "building", "deploying")
+        if k in last
+    )
+    assert has_terminal, f"Last event has no terminal stage: {last}"
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_progress_async():
+    """Deploy a revision and stream progress until terminal state."""
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revision = await sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+
+        events = []
+        async for event in sdk.revisions.progress(revision["id"]):
+            events.append(event)
+
+        _assert_progress_events(events)
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(120)
+def test_revisions_progress_sync():
+    """Deploy a revision and stream progress until terminal state (sync)."""
+    sdk = DenoDeploy()
+    app = sdk.apps.create()
+    try:
+        revision = sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+
+        events = list(sdk.revisions.progress(revision["id"]))
+
+        _assert_progress_events(events)
+    finally:
+        sdk.apps.delete(app["id"])
