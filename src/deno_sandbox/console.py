@@ -228,9 +228,7 @@ class AsyncConsoleClient:
 
         return AsyncPaginatedList(self, items, path, next_cursor, params)
 
-    async def stream_ndjson(
-        self, path: str
-    ) -> AsyncIterator[dict]:
+    async def stream_ndjson(self, path: str) -> AsyncIterator[dict]:
         """Stream NDJSON responses line by line.
 
         Yields parsed JSON objects for each line in the response.
@@ -245,7 +243,9 @@ class AsyncConsoleClient:
             if not response.is_success:
                 await response.aread()
                 code = "UNKNOWN_ERROR"
-                message = f"Request to {req_url} failed with status {response.status_code}"
+                message = (
+                    f"Request to {req_url} failed with status {response.status_code}"
+                )
                 trace_id = response.headers.get("x-deno-trace-id")
                 try:
                     body = response.json()

@@ -1,7 +1,17 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, AsyncIterator, Dict, Iterator, List, TypedDict, Union, cast, overload
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    List,
+    TypedDict,
+    Union,
+    cast,
+    overload,
+)
 from typing_extensions import Literal, NotRequired, Optional
 
 from deno_sandbox.apps import Config, EnvVar, LayerRef
@@ -90,7 +100,14 @@ class Revision(TypedDict):
 
 
 ProgressStageStatus = Literal[
-    "pending", "running", "succeeded", "skipped", "failed", "timed_out", "cancelled", "errored"
+    "pending",
+    "running",
+    "succeeded",
+    "skipped",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "errored",
 ]
 
 
