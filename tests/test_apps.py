@@ -176,6 +176,50 @@ def test_apps_update_env_vars_sync():
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_apps_create_with_crons_disabled_async():
+    sdk = AsyncDenoDeploy()
+
+    app = await sdk.apps.create(config={"crons": False})
+    try:
+        assert app["config"]["crons"] is False
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+def test_apps_create_with_crons_disabled_sync():
+    sdk = DenoDeploy()
+
+    app = sdk.apps.create(config={"crons": False})
+    try:
+        assert app["config"]["crons"] is False
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apps_update_crons_disabled_async():
+    sdk = AsyncDenoDeploy()
+
+    app = await sdk.apps.create()
+    try:
+        updated = await sdk.apps.update(app["id"], config={"crons": False})
+        assert updated["config"]["crons"] is False
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+def test_apps_update_crons_disabled_sync():
+    sdk = DenoDeploy()
+
+    app = sdk.apps.create()
+    try:
+        updated = sdk.apps.update(app["id"], config={"crons": False})
+        assert updated["config"]["crons"] is False
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_apps_delete_async():
     sdk = AsyncDenoDeploy()
 

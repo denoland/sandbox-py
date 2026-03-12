@@ -243,6 +243,31 @@ async def test_revisions_deploy_preview_only_async():
         await sdk.apps.delete(app["id"])
 
 
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_deploy_crons_disabled_fails_async():
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create(config={"crons": False})
+    try:
+        revision = await sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.cron("test", "* * * * *", () => {}); Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+        while revision["status"] in ("queued", "building"):
+            await asyncio.sleep(1)
+            revision = await sdk.revisions.get(revision["id"])
+            assert revision is not None
+        assert revision["status"] == "failed"
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
 VALID_STAGE_STATUSES = {
     "pending",
     "running",
