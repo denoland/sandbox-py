@@ -14,7 +14,8 @@ from typing import (
 )
 from typing_extensions import Literal, NotRequired, Optional
 
-from deno_sandbox.apps import Config, EnvVar, LayerRef
+from .apps import Config, EnvVar, LayerRef
+from .timelines import Timeline
 
 from .bridge import AsyncBridge
 from .console import (
@@ -139,6 +140,26 @@ class RevisionProgress(TypedDict):
     """Artifact upload and routing stage status."""
 
 
+BuildStep = Literal["preparing", "installing", "building", "deploying"]
+
+
+class BuildLogEntry(TypedDict):
+    timestamp: str
+    """ISO 8601 timestamp of the log entry."""
+
+    level: Literal["debug", "info", "warn", "error"]
+    """Log severity level."""
+
+    message: str
+    """Log message content."""
+
+    step: NotRequired[BuildStep]
+    """Build step that produced this log."""
+
+    timeline: NotRequired[str]
+    """Timeline slug, if the log is associated with a specific timeline."""
+
+
 # Keep old name as alias for backward compatibility
 RevisionWithoutTimelines = RevisionListItem
 
@@ -190,6 +211,9 @@ class AsyncRevisions:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        status: Optional[
+            Literal["skipped", "queued", "building", "succeeded", "failed"]
+        ] = None,
     ) -> AsyncPaginatedList[RevisionListItem]:
         """List revisions for a specific app.
 
@@ -197,17 +221,30 @@ class AsyncRevisions:
             app: The app ID or slug.
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
+            status: Filter by revision status.
         """
         options: dict[str, Any] = {}
         if cursor is not None:
             options["cursor"] = cursor
         if limit is not None:
             options["limit"] = limit
+        if status is not None:
+            options["status"] = status
         return await self._client.get_paginated(
             f"/api/v2/apps/{app}/revisions",
             cursor=None,
             params=options if options else None,
         )
+
+    async def delete(self, revision: str) -> None:
+        """Delete a revision.
+
+        Cannot delete active or currently building revisions.
+
+        Args:
+            revision: The revision ID.
+        """
+        await self._client.delete(f"/api/v2/revisions/{revision}")
 
     async def cancel(self, revision: str) -> Revision:
         """Cancel a revision build.
@@ -237,6 +274,42 @@ class AsyncRevisions:
             f"/api/v2/revisions/{revision}/progress"
         ):
             yield cast(RevisionProgress, convert_to_snake_case(event))
+
+    async def build_logs(
+        self,
+        revision: str,
+        *,
+        step: Optional[BuildStep] = None,
+        timeline: Optional[str] = None,
+    ) -> AsyncIterator[BuildLogEntry]:
+        """Stream build logs for a revision.
+
+        Yields BuildLogEntry events as they are produced during the build.
+
+        Args:
+            revision: The revision ID.
+            step: Filter logs by build step.
+            timeline: Filter logs by timeline slug.
+        """
+        params: dict[str, Any] = {}
+        if step is not None:
+            params["step"] = step
+        if timeline is not None:
+            params["timeline"] = timeline
+        async for event in self._client.stream_ndjson(
+            f"/api/v2/revisions/{revision}/build_logs",
+            params=params if params else None,
+        ):
+            yield cast(BuildLogEntry, convert_to_snake_case(event))
+
+    async def timelines(self, revision: str) -> List[Timeline]:
+        """Get timelines for a revision.
+
+        Args:
+            revision: The revision ID.
+        """
+        result = await self._client.get(f"/api/v2/revisions/{revision}/timelines")
+        return [cast(Timeline, convert_to_snake_case(item)) for item in result]
 
     async def deploy(
         self,
@@ -314,6 +387,9 @@ class Revisions:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        status: Optional[
+            Literal["skipped", "queued", "building", "succeeded", "failed"]
+        ] = None,
     ) -> PaginatedList[RevisionListItem]:
         """List revisions for a specific app.
 
@@ -321,9 +397,22 @@ class Revisions:
             app: The app ID or slug.
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
+            status: Filter by revision status.
         """
-        paginated = self._bridge.run(self._async.list(app, cursor=cursor, limit=limit))
+        paginated = self._bridge.run(
+            self._async.list(app, cursor=cursor, limit=limit, status=status)
+        )
         return PaginatedList(self._bridge, paginated)
+
+    def delete(self, revision: str) -> None:
+        """Delete a revision.
+
+        Cannot delete active or currently building revisions.
+
+        Args:
+            revision: The revision ID.
+        """
+        self._bridge.run(self._async.delete(revision))
 
     def cancel(self, revision: str) -> Revision:
         """Cancel a revision build.
@@ -348,6 +437,41 @@ class Revisions:
             return [event async for event in self._async.progress(revision)]
 
         return iter(self._bridge.run(_collect()))
+
+    def build_logs(
+        self,
+        revision: str,
+        *,
+        step: Optional[BuildStep] = None,
+        timeline: Optional[str] = None,
+    ) -> Iterator[BuildLogEntry]:
+        """Stream build logs for a revision.
+
+        Yields BuildLogEntry events as they are produced during the build.
+
+        Args:
+            revision: The revision ID.
+            step: Filter logs by build step.
+            timeline: Filter logs by timeline slug.
+        """
+
+        async def _collect() -> list[BuildLogEntry]:
+            return [
+                event
+                async for event in self._async.build_logs(
+                    revision, step=step, timeline=timeline
+                )
+            ]
+
+        return iter(self._bridge.run(_collect()))
+
+    def timelines(self, revision: str) -> List[Timeline]:
+        """Get timelines for a revision.
+
+        Args:
+            revision: The revision ID.
+        """
+        return self._bridge.run(self._async.timelines(revision))
 
     def deploy(
         self,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, TypedDict, Union, cast
+from typing import Any, AsyncIterator, Dict, Iterator, List, TypedDict, Union, cast
 from typing_extensions import Literal, NotRequired, Optional
 
 from .utils import convert_to_snake_case
@@ -207,18 +207,27 @@ class AsyncApps:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        labels: Optional[Dict[str, str]] = None,
+        layer: Optional[str] = None,
     ) -> AsyncPaginatedList[AppListItem]:
         """List apps of an org.
 
         Args:
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
+            labels: Filter by labels (e.g. ``{"key": "value"}``).
+            layer: Filter by layer ID or slug.
         """
         options: dict[str, Any] = {}
         if cursor is not None:
             options["cursor"] = cursor
         if limit is not None:
             options["limit"] = limit
+        if labels is not None:
+            for key, value in labels.items():
+                options[f"labels[{key}]"] = value
+        if layer is not None:
+            options["layer"] = layer
         return await self._client.get_paginated(
             "/api/v2/apps", cursor=None, params=options if options else None
         )
@@ -227,6 +236,7 @@ class AsyncApps:
         self,
         *,
         slug: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
         layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInput]] = None,
         config: Optional[Config] = None,
@@ -235,6 +245,7 @@ class AsyncApps:
 
         Args:
             slug: Human readable identifier for the app.
+            labels: Key-value labels for filtering and grouping.
             layers: Layer IDs or slugs to reference.
             env_vars: App-specific environment variables.
             config: Default build and runtime configuration.
@@ -242,6 +253,8 @@ class AsyncApps:
         options: dict[str, Any] = {}
         if slug is not None:
             options["slug"] = slug
+        if labels is not None:
+            options["labels"] = labels
         if layers is not None:
             options["layers"] = layers
         if env_vars is not None:
@@ -257,6 +270,7 @@ class AsyncApps:
         app: str,
         *,
         slug: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
         layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarUpdate]] = None,
         config: Optional[Config] = None,
@@ -266,6 +280,7 @@ class AsyncApps:
         Args:
             app: The app ID or slug to update.
             slug: Human readable identifier for the app.
+            labels: Replace all labels.
             layers: Replace all layer references.
             env_vars: Deep merge with existing environment variables.
             config: Replace the entire deploy config.
@@ -273,6 +288,8 @@ class AsyncApps:
         update: dict[str, Any] = {}
         if slug is not None:
             update["slug"] = slug
+        if labels is not None:
+            update["labels"] = labels
         if layers is not None:
             update["layers"] = layers
         if env_vars is not None:
@@ -327,6 +344,42 @@ class AsyncApps:
         result = await self._client.get(f"/api/v2/apps/{app}/logs", params)
         return cast(RuntimeLogsResponse, convert_to_snake_case(result))
 
+    async def logs_stream(
+        self,
+        app: str,
+        *,
+        start: str,
+        end: Optional[str] = None,
+        revision_id: Optional[str] = None,
+        level: Optional[Literal["debug", "info", "warn", "error"]] = None,
+        query: Optional[str] = None,
+    ) -> AsyncIterator[RuntimeLog]:
+        """Stream runtime logs for an app in real-time.
+
+        Yields RuntimeLog events as they are produced.
+
+        Args:
+            app: The app ID or slug.
+            start: Start of the time range (ISO 8601).
+            end: End of the time range (ISO 8601). Defaults to now.
+            revision_id: Filter logs by revision ID.
+            level: Minimum log severity level.
+            query: Full-text search query.
+        """
+        params: dict[str, Any] = {"start": start, "stream": "true"}
+        if end is not None:
+            params["end"] = end
+        if revision_id is not None:
+            params["revision_id"] = revision_id
+        if level is not None:
+            params["level"] = level
+        if query is not None:
+            params["query"] = query
+        async for event in self._client.stream_ndjson(
+            f"/api/v2/apps/{app}/logs", params=params
+        ):
+            yield cast(RuntimeLog, convert_to_snake_case(event))
+
 
 class Apps:
     def __init__(self, client: AsyncConsoleClient, bridge: AsyncBridge):
@@ -343,20 +396,27 @@ class Apps:
         *,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        labels: Optional[Dict[str, str]] = None,
+        layer: Optional[str] = None,
     ) -> PaginatedList[AppListItem]:
         """List apps of an org.
 
         Args:
             cursor: The cursor for pagination.
             limit: Limit the number of items to return.
+            labels: Filter by labels (e.g. ``{"key": "value"}``).
+            layer: Filter by layer ID or slug.
         """
-        paginated = self._bridge.run(self._async.list(cursor=cursor, limit=limit))
+        paginated = self._bridge.run(
+            self._async.list(cursor=cursor, limit=limit, labels=labels, layer=layer)
+        )
         return PaginatedList(self._bridge, paginated)
 
     def create(
         self,
         *,
         slug: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
         layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarInput]] = None,
         config: Optional[Config] = None,
@@ -365,13 +425,18 @@ class Apps:
 
         Args:
             slug: Human readable identifier for the app.
+            labels: Key-value labels for filtering and grouping.
             layers: Layer IDs or slugs to reference.
             env_vars: App-specific environment variables.
             config: Default build and runtime configuration.
         """
         return self._bridge.run(
             self._async.create(
-                slug=slug, layers=layers, env_vars=env_vars, config=config
+                slug=slug,
+                labels=labels,
+                layers=layers,
+                env_vars=env_vars,
+                config=config,
             )
         )
 
@@ -380,6 +445,7 @@ class Apps:
         app: str,
         *,
         slug: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
         layers: Optional[List[str]] = None,
         env_vars: Optional[List[EnvVarUpdate]] = None,
         config: Optional[Config] = None,
@@ -389,13 +455,19 @@ class Apps:
         Args:
             app: The app ID or slug to update.
             slug: Human readable identifier for the app.
+            labels: Replace all labels.
             layers: Replace all layer references.
             env_vars: Deep merge with existing environment variables.
             config: Replace the entire deploy config.
         """
         return self._bridge.run(
             self._async.update(
-                app, slug=slug, layers=layers, env_vars=env_vars, config=config
+                app,
+                slug=slug,
+                labels=labels,
+                layers=layers,
+                env_vars=env_vars,
+                config=config,
             )
         )
 
@@ -439,3 +511,41 @@ class Apps:
                 limit=limit,
             )
         )
+
+    def logs_stream(
+        self,
+        app: str,
+        *,
+        start: str,
+        end: Optional[str] = None,
+        revision_id: Optional[str] = None,
+        level: Optional[Literal["debug", "info", "warn", "error"]] = None,
+        query: Optional[str] = None,
+    ) -> Iterator[RuntimeLog]:
+        """Stream runtime logs for an app in real-time.
+
+        Yields RuntimeLog events as they are produced.
+
+        Args:
+            app: The app ID or slug.
+            start: Start of the time range (ISO 8601).
+            end: End of the time range (ISO 8601). Defaults to now.
+            revision_id: Filter logs by revision ID.
+            level: Minimum log severity level.
+            query: Full-text search query.
+        """
+
+        async def _collect() -> list[RuntimeLog]:
+            return [
+                event
+                async for event in self._async.logs_stream(
+                    app,
+                    start=start,
+                    end=end,
+                    revision_id=revision_id,
+                    level=level,
+                    query=query,
+                )
+            ]
+
+        return iter(self._bridge.run(_collect()))

@@ -222,9 +222,7 @@ async def test_revisions_deploy_preview_only_async():
         assert revision["status"] == "succeeded", revision.get("failure_reason")
 
         # Verify timeline assignment via the revision timelines API
-        timelines = await sdk.revisions._client.get(
-            f"/api/v2/revisions/{revision['id']}/timelines"
-        )
+        timelines = await sdk.revisions.timelines(revision["id"])
         production = [
             t
             for t in timelines
@@ -356,5 +354,216 @@ def test_revisions_progress_sync():
         events = list(sdk.revisions.progress(revision["id"]))
 
         _assert_progress_events(events)
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.skip(reason="DELETE /v2/revisions/{id} returns 500 on staging")
+@pytest.mark.timeout(120)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_delete_async():
+    """Deploy a preview-only revision, wait for it, then delete it."""
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revision = await sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+            production=False,
+            preview=True,
+        )
+        # Wait for build to finish
+        async for _ in sdk.revisions.progress(revision["id"]):
+            pass
+
+        await sdk.revisions.delete(revision["id"])
+
+        fetched = await sdk.revisions.get(revision["id"])
+        assert fetched is not None
+        assert fetched.get("deleted_at") is not None
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+@pytest.mark.skip(reason="DELETE /v2/revisions/{id} returns 500 on staging")
+@pytest.mark.timeout(120)
+def test_revisions_delete_sync():
+    """Deploy a preview-only revision, wait for it, then delete it."""
+    sdk = DenoDeploy()
+    app = sdk.apps.create()
+    try:
+        revision = sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+            production=False,
+            preview=True,
+        )
+        # Wait for build to finish
+        list(sdk.revisions.progress(revision["id"]))
+
+        sdk.revisions.delete(revision["id"])
+
+        fetched = sdk.revisions.get(revision["id"])
+        assert fetched is not None
+        assert fetched.get("deleted_at") is not None
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_build_logs_async():
+    """Deploy a revision and stream build logs."""
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revision = await sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+
+        logs = []
+        async for entry in sdk.revisions.build_logs(revision["id"]):
+            logs.append(entry)
+            assert "timestamp" in entry
+            assert "level" in entry
+            assert "message" in entry
+
+        assert len(logs) > 0, "Expected at least one build log entry"
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(120)
+def test_revisions_build_logs_sync():
+    """Deploy a revision and stream build logs (sync)."""
+    sdk = DenoDeploy()
+    app = sdk.apps.create()
+    try:
+        revision = sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+
+        logs = list(sdk.revisions.build_logs(revision["id"]))
+
+        assert len(logs) > 0, "Expected at least one build log entry"
+        for entry in logs:
+            assert "timestamp" in entry
+            assert "level" in entry
+            assert "message" in entry
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_timelines_async():
+    """Deploy a revision and check its timelines."""
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revision = await sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+        # Wait for build to finish
+        async for _ in sdk.revisions.progress(revision["id"]):
+            pass
+
+        timelines = await sdk.revisions.timelines(revision["id"])
+        assert isinstance(timelines, list)
+        assert len(timelines) > 0
+        for t in timelines:
+            assert "slug" in t
+            assert "partition" in t
+            assert "domains" in t
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+@pytest.mark.timeout(120)
+def test_revisions_timelines_sync():
+    """Deploy a revision and check its timelines (sync)."""
+    sdk = DenoDeploy()
+    app = sdk.apps.create()
+    try:
+        revision = sdk.revisions.deploy(
+            app["id"],
+            assets={
+                "main.ts": {
+                    "kind": "file",
+                    "encoding": "utf-8",
+                    "content": 'Deno.serve(() => new Response("Hello"))',
+                }
+            },
+        )
+        # Wait for build to finish
+        list(sdk.revisions.progress(revision["id"]))
+
+        timelines = sdk.revisions.timelines(revision["id"])
+        assert isinstance(timelines, list)
+        assert len(timelines) > 0
+        for t in timelines:
+            assert "slug" in t
+            assert "partition" in t
+            assert "domains" in t
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revisions_list_with_status_async():
+    """List revisions filtered by status."""
+    sdk = AsyncDenoDeploy()
+    app = await sdk.apps.create()
+    try:
+        revisions = await sdk.revisions.list(app["id"], status="succeeded")
+        assert isinstance(revisions.items, list)
+        for r in revisions.items:
+            assert r["status"] == "succeeded"
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+def test_revisions_list_with_status_sync():
+    """List revisions filtered by status."""
+    sdk = DenoDeploy()
+    app = sdk.apps.create()
+    try:
+        revisions = sdk.revisions.list(app["id"], status="succeeded")
+        assert isinstance(revisions.items, list)
+        for r in revisions.items:
+            assert r["status"] == "succeeded"
     finally:
         sdk.apps.delete(app["id"])

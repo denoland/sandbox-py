@@ -269,3 +269,82 @@ def test_apps_list_sync():
         assert any(a["id"] == app["id"] for a in apps.items)
     finally:
         sdk.apps.delete(app["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apps_create_with_labels_async():
+    sdk = AsyncDenoDeploy()
+
+    labels = {"custom.env": "test", "custom.team": "sdk"}
+    app = await sdk.apps.create(labels=labels)
+    try:
+        assert app["id"] is not None
+        fetched = await sdk.apps.get(app["id"])
+        assert fetched is not None
+        assert fetched.get("labels") == labels
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+def test_apps_create_with_labels_sync():
+    sdk = DenoDeploy()
+
+    labels = {"custom.env": "test", "custom.team": "sdk"}
+    app = sdk.apps.create(labels=labels)
+    try:
+        assert app["id"] is not None
+        fetched = sdk.apps.get(app["id"])
+        assert fetched is not None
+        assert fetched.get("labels") == labels
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apps_update_labels_async():
+    sdk = AsyncDenoDeploy()
+
+    app = await sdk.apps.create(labels={"custom.env": "staging"})
+    try:
+        updated = await sdk.apps.update(app["id"], labels={"custom.env": "production"})
+        assert updated.get("labels") == {"custom.env": "production"}
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+def test_apps_update_labels_sync():
+    sdk = DenoDeploy()
+
+    app = sdk.apps.create(labels={"custom.env": "staging"})
+    try:
+        updated = sdk.apps.update(app["id"], labels={"custom.env": "production"})
+        assert updated.get("labels") == {"custom.env": "production"}
+    finally:
+        sdk.apps.delete(app["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apps_list_filter_by_labels_async():
+    sdk = AsyncDenoDeploy()
+
+    unique = uuid.uuid4().hex[:8]
+    labels = {"custom.test_id": unique}
+    app = await sdk.apps.create(labels=labels)
+    try:
+        apps = await sdk.apps.list(labels=labels)
+        assert any(a["id"] == app["id"] for a in apps.items)
+    finally:
+        await sdk.apps.delete(app["id"])
+
+
+def test_apps_list_filter_by_labels_sync():
+    sdk = DenoDeploy()
+
+    unique = uuid.uuid4().hex[:8]
+    labels = {"custom.test_id": unique}
+    app = sdk.apps.create(labels=labels)
+    try:
+        apps = sdk.apps.list(labels=labels)
+        assert any(a["id"] == app["id"] for a in apps.items)
+    finally:
+        sdk.apps.delete(app["id"])
