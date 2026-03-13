@@ -107,6 +107,9 @@ class Config(TypedDict, total=False):
     runtime: Runtime
     """Runtime configuration. Mutually exclusive with ``framework``."""
 
+    crons: bool
+    """Whether cron jobs are enabled for revisions of the app. When false, revisions that register cron jobs using ``Deno.cron`` fail to build. Defaults to true."""
+
 
 class LayerRef(TypedDict):
     id: str
