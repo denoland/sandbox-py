@@ -284,7 +284,7 @@ async def test_apps_list_filter_by_labels_async():
     sdk = AsyncDenoDeploy()
 
     unique = uuid.uuid4().hex[:8]
-    labels = {f"custom.test_id": unique}
+    labels = {"custom.test_id": unique}
     app = await sdk.apps.create(labels=labels)
     try:
         apps = await sdk.apps.list(labels=labels)
@@ -297,7 +297,7 @@ def test_apps_list_filter_by_labels_sync():
     sdk = DenoDeploy()
 
     unique = uuid.uuid4().hex[:8]
-    labels = {f"custom.test_id": unique}
+    labels = {"custom.test_id": unique}
     app = sdk.apps.create(labels=labels)
     try:
         apps = sdk.apps.list(labels=labels)
