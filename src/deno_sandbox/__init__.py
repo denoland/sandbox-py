@@ -26,6 +26,8 @@ from .revisions import (
     SymlinkAsset,
     Asset,
     EnvVarInputForDeploy,
+    BuildLogEntry,
+    BuildStep,
 )
 from .layers import (
     Layers,
@@ -68,6 +70,8 @@ __all__ = [
     "SymlinkAsset",
     "Asset",
     "EnvVarInputForDeploy",
+    "BuildLogEntry",
+    "BuildStep",
     "Layer",
     "LayerAppRef",
     "HTTPStatusError",

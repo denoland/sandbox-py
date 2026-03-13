@@ -228,12 +228,16 @@ class AsyncConsoleClient:
 
         return AsyncPaginatedList(self, items, path, next_cursor, params)
 
-    async def stream_ndjson(self, path: str) -> AsyncIterator[dict]:
+    async def stream_ndjson(
+        self, path: str, params: Optional[dict[str, Any]] = None
+    ) -> AsyncIterator[dict]:
         """Stream NDJSON responses line by line.
 
         Yields parsed JSON objects for each line in the response.
         """
         req_url = self._options["console_url"].join(path)
+        if params is not None:
+            req_url = req_url.copy_merge_params(params)
         headers = {
             "Accept": "application/x-ndjson",
         }
