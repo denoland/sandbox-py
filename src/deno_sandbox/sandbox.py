@@ -447,7 +447,8 @@ class AsyncBuild:
             "Authorization": f"Bearer {self._client._options['token']}",
         }
 
-        async with httpx.AsyncClient() as http_client:
+        timeout = httpx.Timeout(10.0, read=120.0)
+        async with httpx.AsyncClient(timeout=timeout) as http_client:
             async with http_client.stream("GET", str(url), headers=headers) as response:
                 response.raise_for_status()
                 async for data in _parse_sse_stream(response.aiter_bytes()):
