@@ -14,8 +14,8 @@ from typing import (
 )
 from typing_extensions import Literal, NotRequired, Optional
 
-from deno_sandbox.apps import Config, EnvVar, LayerRef
-from deno_sandbox.timelines import Timeline
+from .apps import Config, EnvVar, LayerRef
+from .timelines import Timeline
 
 from .bridge import AsyncBridge
 from .console import (
