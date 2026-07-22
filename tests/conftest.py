@@ -6,8 +6,9 @@ from deno_sandbox import AsyncDenoDeploy, DenoDeploy
 
 # Test modules that run fully offline (no DENO_DEPLOY_TOKEN, no live sandbox).
 # Every other module drives a real backend, so it is skipped when no token is
-# available (e.g. in CI). A local run that sets DENO_DEPLOY_TOKEN still runs
-# the whole suite.
+# available (e.g. in CI); a local run that sets DENO_DEPLOY_TOKEN still runs the
+# whole suite. NB: a new offline test in a module not listed here is silently
+# skipped in CI — add its module name to this set so it actually runs.
 HERMETIC_TEST_MODULES = {"test_utils", "test_console_errors"}
 
 
