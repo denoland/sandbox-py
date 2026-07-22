@@ -45,6 +45,12 @@ class EnvVarInputForDeploy(TypedDict):
     value: str
 
 
+# A revision's garbage-collection policy. "auto" follows the normal
+# inactivity-based cleanup; "indefinite" exempts the revision from automatic
+# deletion (enterprise opt-in).
+RevisionRetention = Literal["auto", "indefinite"]
+
+
 class RevisionListItem(TypedDict):
     id: str
     """The unique identifier for the revision."""
@@ -66,6 +72,12 @@ class RevisionListItem(TypedDict):
 
     deleted_at: str | None
     """ISO 8601 timestamp of deletion, or null if active."""
+
+    retention: NotRequired[RevisionRetention]
+    """Garbage-collection policy: "auto" (normal inactivity-based cleanup) or
+    "indefinite" (exempt from automatic deletion).
+
+    Only present for enterprise organizations opted in to revision retention."""
 
 
 class Revision(TypedDict):
@@ -98,6 +110,12 @@ class Revision(TypedDict):
 
     deleted_at: str | None
     """ISO 8601 timestamp of deletion, or null if active."""
+
+    retention: NotRequired[RevisionRetention]
+    """Garbage-collection policy: "auto" (normal inactivity-based cleanup) or
+    "indefinite" (exempt from automatic deletion).
+
+    Only present for enterprise organizations opted in to revision retention."""
 
 
 ProgressStageStatus = Literal[
@@ -322,6 +340,7 @@ class AsyncRevisions:
         labels: Optional[Dict[str, str]] = None,
         production: Optional[bool] = None,
         preview: Optional[bool] = None,
+        retention: Optional[RevisionRetention] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
 
@@ -336,6 +355,10 @@ class AsyncRevisions:
                 Defaults to true on the server.
             preview: Whether to deploy as a preview deployment.
                 Defaults to false on the server.
+            retention: Garbage-collection policy for the new revision. "auto"
+                (the default) follows the normal inactivity-based cleanup;
+                "indefinite" exempts it from automatic deletion. "indefinite"
+                is enterprise opt-in and is rejected without the entitlement.
 
         Returns:
             The created Revision (build is async; poll for status).
@@ -353,7 +376,33 @@ class AsyncRevisions:
             body["production"] = production
         if preview is not None:
             body["preview"] = preview
+        if retention is not None:
+            body["retention"] = retention
         result = await self._client.post(f"/api/v2/apps/{app}/deploy", body)
+        return cast(Revision, convert_to_snake_case(result))
+
+    async def set_retention(
+        self, revision: str, retention: RevisionRetention
+    ) -> Revision:
+        """Set a revision's garbage-collection policy.
+
+        "auto" follows the normal inactivity-based cleanup; "indefinite"
+        exempts the revision from automatic deletion. "indefinite" is only
+        available to enterprise organizations that have opted in to revision
+        retention — contact Deno support to enable it, and it is rejected
+        without the entitlement. Setting "auto" is always permitted for an
+        already-retained revision.
+
+        Args:
+            revision: The revision ID.
+            retention: The garbage-collection policy ("auto" or "indefinite").
+
+        Returns:
+            The updated Revision.
+        """
+        result = await self._client.patch(
+            f"/api/v2/revisions/{revision}", {"retention": retention}
+        )
         return cast(Revision, convert_to_snake_case(result))
 
 
@@ -484,6 +533,7 @@ class Revisions:
         labels: Optional[Dict[str, str]] = None,
         production: Optional[bool] = None,
         preview: Optional[bool] = None,
+        retention: Optional[RevisionRetention] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
 
@@ -498,6 +548,10 @@ class Revisions:
                 Defaults to true on the server.
             preview: Whether to deploy as a preview deployment.
                 Defaults to false on the server.
+            retention: Garbage-collection policy for the new revision. "auto"
+                (the default) follows the normal inactivity-based cleanup;
+                "indefinite" exempts it from automatic deletion. "indefinite"
+                is enterprise opt-in and is rejected without the entitlement.
 
         Returns:
             The created Revision (build is async; poll for status).
@@ -512,5 +566,25 @@ class Revisions:
                 labels=labels,
                 production=production,
                 preview=preview,
+                retention=retention,
             )
         )
+
+    def set_retention(self, revision: str, retention: RevisionRetention) -> Revision:
+        """Set a revision's garbage-collection policy.
+
+        "auto" follows the normal inactivity-based cleanup; "indefinite"
+        exempts the revision from automatic deletion. "indefinite" is only
+        available to enterprise organizations that have opted in to revision
+        retention — contact Deno support to enable it, and it is rejected
+        without the entitlement. Setting "auto" is always permitted for an
+        already-retained revision.
+
+        Args:
+            revision: The revision ID.
+            retention: The garbage-collection policy ("auto" or "indefinite").
+
+        Returns:
+            The updated Revision.
+        """
+        return self._bridge.run(self._async.set_retention(revision, retention))
