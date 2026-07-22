@@ -67,6 +67,11 @@ class RevisionListItem(TypedDict):
     deleted_at: str | None
     """ISO 8601 timestamp of deletion, or null if active."""
 
+    retained: NotRequired[bool]
+    """Whether the revision is exempt from automatic garbage collection.
+
+    Only present for enterprise organizations opted in to revision retention."""
+
 
 class Revision(TypedDict):
     id: str
@@ -98,6 +103,11 @@ class Revision(TypedDict):
 
     deleted_at: str | None
     """ISO 8601 timestamp of deletion, or null if active."""
+
+    retained: NotRequired[bool]
+    """Whether the revision is exempt from automatic garbage collection.
+
+    Only present for enterprise organizations opted in to revision retention."""
 
 
 ProgressStageStatus = Literal[
@@ -322,6 +332,7 @@ class AsyncRevisions:
         labels: Optional[Dict[str, str]] = None,
         production: Optional[bool] = None,
         preview: Optional[bool] = None,
+        retained: Optional[bool] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
 
@@ -336,6 +347,9 @@ class AsyncRevisions:
                 Defaults to true on the server.
             preview: Whether to deploy as a preview deployment.
                 Defaults to false on the server.
+            retained: Create the revision exempt from automatic garbage
+                collection. Enterprise opt-in; deploys that set this without
+                the entitlement are rejected. Defaults to false on the server.
 
         Returns:
             The created Revision (build is async; poll for status).
@@ -353,7 +367,29 @@ class AsyncRevisions:
             body["production"] = production
         if preview is not None:
             body["preview"] = preview
+        if retained is not None:
+            body["retained"] = retained
         result = await self._client.post(f"/api/v2/apps/{app}/deploy", body)
+        return cast(Revision, convert_to_snake_case(result))
+
+    async def set_retained(self, revision: str, retained: bool) -> Revision:
+        """Set whether a revision is exempt from automatic garbage collection.
+
+        Only available to enterprise organizations that have opted in to
+        revision retention — contact Deno support to enable it. Setting it
+        without the entitlement is rejected; clearing it is always permitted
+        for an already-retained revision.
+
+        Args:
+            revision: The revision ID.
+            retained: Whether the revision should be retained.
+
+        Returns:
+            The updated Revision.
+        """
+        result = await self._client.patch(
+            f"/api/v2/revisions/{revision}", {"retained": retained}
+        )
         return cast(Revision, convert_to_snake_case(result))
 
 
@@ -484,6 +520,7 @@ class Revisions:
         labels: Optional[Dict[str, str]] = None,
         production: Optional[bool] = None,
         preview: Optional[bool] = None,
+        retained: Optional[bool] = None,
     ) -> Revision:
         """Deploy a revision by uploading source files as assets.
 
@@ -498,6 +535,9 @@ class Revisions:
                 Defaults to true on the server.
             preview: Whether to deploy as a preview deployment.
                 Defaults to false on the server.
+            retained: Create the revision exempt from automatic garbage
+                collection. Enterprise opt-in; deploys that set this without
+                the entitlement are rejected. Defaults to false on the server.
 
         Returns:
             The created Revision (build is async; poll for status).
@@ -512,5 +552,23 @@ class Revisions:
                 labels=labels,
                 production=production,
                 preview=preview,
+                retained=retained,
             )
         )
+
+    def set_retained(self, revision: str, retained: bool) -> Revision:
+        """Set whether a revision is exempt from automatic garbage collection.
+
+        Only available to enterprise organizations that have opted in to
+        revision retention — contact Deno support to enable it. Setting it
+        without the entitlement is rejected; clearing it is always permitted
+        for an already-retained revision.
+
+        Args:
+            revision: The revision ID.
+            retained: Whether the revision should be retained.
+
+        Returns:
+            The updated Revision.
+        """
+        return self._bridge.run(self._async.set_retained(revision, retained))
