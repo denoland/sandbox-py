@@ -39,8 +39,10 @@ jobs:
       - name: Type Checking
         run: uv run ty check
 
-      # - name: Run tests
-      #   run: uv run pytest tests
+      # Live sandbox tests need DENO_DEPLOY_TOKEN + a backend and are skipped
+      # here via conftest; only the offline tests run in CI.
+      - name: Run tests
+        run: uv run pytest tests
 
       - name: Minimize uv cache
         run: uv cache prune --ci
