@@ -289,7 +289,8 @@ by every timeline built from the same partition config, so it only identifies a
 timeline that exists once per app.
 
 ```python
-timeline = next(t for t in sdk.timelines.list("my-app") if t["slug"] == "production")
+timelines = sdk.timelines.list("my-app")
+timeline = next(t for t in timelines.items if t["slug"] == "production")
 
 # Hold production on a known-good revision.
 sdk.timelines.pin("my-app", timeline["id"], "rev-abc123")

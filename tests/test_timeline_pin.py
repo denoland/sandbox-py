@@ -98,7 +98,7 @@ async def test_promote_async():
     )
 
 
-async def test_pin_and_unpin_sync():
+def test_pin_and_unpin_sync():
     client = make_client()
     bridge = AsyncBridge()
     request = AsyncMock(return_value=no_content())
@@ -116,7 +116,7 @@ async def test_pin_and_unpin_sync():
         bridge.stop()
 
 
-async def test_promote_sync():
+def test_promote_sync():
     client = make_client()
     bridge = AsyncBridge()
     request = AsyncMock(return_value=no_content())
@@ -133,3 +133,46 @@ async def test_promote_sync():
         str(kwargs["url"])
         == "https://console.example.com/api/v2/revisions/rev-1/promote"
     )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_preserves_timeline_fields():
+    """`id`, `pinned_revision` and the partition keys survive response parsing.
+
+    `get_paginated` runs every item through `convert_to_snake_case`, which
+    rewrites dict keys — including the partition's, which are dotted label
+    names that must be passed through untouched.
+    """
+    client = make_client()
+    body = [
+        {
+            "id": "git-branch:main",
+            "slug": "git-branch",
+            "partition": {"deno.git.branch": "main"},
+            "pinned_revision": "rev-1",
+            "domains": [{"domain": "example.deno.net"}],
+        },
+        {
+            "id": "production",
+            "slug": "production",
+            "partition": {},
+            "pinned_revision": None,
+            "domains": [],
+        },
+    ]
+    response = httpx.Response(
+        status_code=200,
+        json=body,
+        headers={"content-type": "application/json"},
+        request=httpx.Request("GET", "https://console.example.com/"),
+    )
+
+    with patch.object(client.client, "request", new=AsyncMock(return_value=response)):
+        timelines = await AsyncTimelines(client).list("my-app")
+
+    branch, production = timelines.items
+    assert branch["id"] == "git-branch:main"
+    assert branch["partition"] == {"deno.git.branch": "main"}
+    assert branch["pinned_revision"] == "rev-1"
+    assert production["id"] == "production"
+    assert production["pinned_revision"] is None
