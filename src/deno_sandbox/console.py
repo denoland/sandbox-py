@@ -168,6 +168,16 @@ class AsyncConsoleClient:
         response = await self._request("POST", req_url, data)
         return response.json()
 
+    async def post_no_content(
+        self, path: str, data: Optional[Any] = None
+    ) -> httpx.Response:
+        req_url = self._options["console_url"].join(path)
+        return await self._request("POST", req_url, data)
+
+    async def put(self, path: str, data: Optional[Any] = None) -> httpx.Response:
+        req_url = self._options["console_url"].join(path)
+        return await self._request("PUT", req_url, data)
+
     async def patch(self, path: str, data: Any) -> dict:
         req_url = self._options["console_url"].join(path)
         response = await self._request("PATCH", req_url, data)
