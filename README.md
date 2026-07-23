@@ -239,7 +239,7 @@ The main entry point for the SDK. Provides access to:
 - `snapshots` - List and manage volume snapshots
 - `apps` - Create and manage Deno Deploy applications
 - `revisions` - List and inspect app revisions
-- `timelines` - List deployment timelines and domains
+- `timelines` - List deployment timelines and pin them to a revision
 
 ### Sandbox
 
@@ -271,12 +271,32 @@ Track deployment revisions:
 
 - `get(app, id)` - Get a specific revision
 - `list(app)` - List revisions for an app
+- `promote(revision)` - Make an already-built revision the live production
+  revision, without rebuilding it
 
 ### Timelines
 
 Manage deployment timelines:
 
 - `list(app)` - List timelines for an app (includes domains)
+- `pin(app, timeline, revision)` - Pin a timeline to one of its revisions, so it
+  keeps serving that revision instead of its newest member
+- `unpin(app, timeline)` - Release the pin, returning the timeline to serving
+  its newest member
+
+Pass a timeline's `id` — not its `slug` — to `pin` and `unpin`: a slug is shared
+by every timeline built from the same partition config, so it only identifies a
+timeline that exists once per app.
+
+```python
+timeline = next(t for t in sdk.timelines.list("my-app") if t["slug"] == "production")
+
+# Hold production on a known-good revision.
+sdk.timelines.pin("my-app", timeline["id"], "rev-abc123")
+
+# Later: let the newest deploy take over again.
+sdk.timelines.unpin("my-app", timeline["id"])
+```
 
 ## License
 

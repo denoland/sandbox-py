@@ -381,6 +381,22 @@ class AsyncRevisions:
         result = await self._client.post(f"/api/v2/apps/{app}/deploy", body)
         return cast(Revision, convert_to_snake_case(result))
 
+    async def promote(self, revision: str) -> None:
+        """Make an already-built revision the live production revision.
+
+        The revision is not rebuilt. It joins the app's default production
+        timeline if it is not a member yet, and that timeline is then pinned to
+        it. Because it leaves a pin behind, later deploys to production join the
+        timeline but do not go live until the pin moves — promote another
+        revision — or is removed with `timelines.unpin`.
+
+        The revision must be built.
+
+        Args:
+            revision: The revision ID.
+        """
+        await self._client.post_no_content(f"/api/v2/revisions/{revision}/promote")
+
     async def set_retention(
         self, revision: str, retention: RevisionRetention
     ) -> Revision:
@@ -569,6 +585,22 @@ class Revisions:
                 retention=retention,
             )
         )
+
+    def promote(self, revision: str) -> None:
+        """Make an already-built revision the live production revision.
+
+        The revision is not rebuilt. It joins the app's default production
+        timeline if it is not a member yet, and that timeline is then pinned to
+        it. Because it leaves a pin behind, later deploys to production join the
+        timeline but do not go live until the pin moves — promote another
+        revision — or is removed with `timelines.unpin`.
+
+        The revision must be built.
+
+        Args:
+            revision: The revision ID.
+        """
+        self._bridge.run(self._async.promote(revision))
 
     def set_retention(self, revision: str, retention: RevisionRetention) -> Revision:
         """Set a revision's garbage-collection policy.

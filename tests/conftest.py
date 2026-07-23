@@ -9,7 +9,7 @@ from deno_sandbox import AsyncDenoDeploy, DenoDeploy
 # available (e.g. in CI); a local run that sets DENO_DEPLOY_TOKEN still runs the
 # whole suite. NB: a new offline test in a module not listed here is silently
 # skipped in CI — add its module name to this set so it actually runs.
-HERMETIC_TEST_MODULES = {"test_utils", "test_console_errors"}
+HERMETIC_TEST_MODULES = {"test_utils", "test_console_errors", "test_timeline_pin"}
 
 
 def pytest_collection_modifyitems(config, items):  # noqa: ARG001
